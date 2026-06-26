@@ -31,7 +31,7 @@ class PortfolioBacktester:
         self.circuit_breaker_tripped = False
         self.circuit_breaker_date = None
 
-    def run(self, test_dfs, test_signals_dict, test_allowance_dict):
+    def run(self, test_dfs, test_signals_dict, test_allowance_dict, test_probs_dict=None):
         """
         Runs the portfolio simulation with risk filters, slippage, and circuit breaker.
         """
@@ -179,9 +179,10 @@ class PortfolioBacktester:
                             positions[ticker]['sl'] = pos['entry_price']
                             positions[ticker]['breakeven'] = True
             
-            # 5. EVALUATE NEW ENTRIES
+            # 5. EVALUATE NEW ENTRIES WITH CROSS-ASSET RELATIVE STRENGTH RANKING
             cash_at_start = current_equity  # Position size is based on total account equity
             
+            candidates = []
             for ticker in test_dfs.keys():
                 df = test_dfs[ticker]
                 if date not in df.index or ticker in positions:
@@ -192,37 +193,64 @@ class PortfolioBacktester:
                 scale = test_allowance_dict[ticker][date_idx]
                 
                 if sig == 1 and scale > 0.0:
-                    close_val = df.loc[date, 'Close']
-                    atr_val = df.loc[date, 'ATR']
+                    prob = 0.5
+                    if test_probs_dict is not None and ticker in test_probs_dict:
+                        prob = test_probs_dict[ticker][date_idx]
+                    candidates.append({
+                        'ticker': ticker,
+                        'prob': prob,
+                        'scale': scale,
+                        'df': df,
+                        'date_idx': date_idx
+                    })
+            
+            # Sort candidates by predicted probability in descending order (relative strength ranking)
+            candidates = sorted(candidates, key=lambda x: x['prob'], reverse=True)
+            
+            # Execute only the single highest probability candidate to avoid capital dilution
+            if candidates:
+                best_cand = candidates[0]
+                ticker = best_cand['ticker']
+                df = best_cand['df']
+                scale = best_cand['scale']
+                date_idx = best_cand['date_idx']
+                
+                close_val = df.loc[date, 'Close']
+                atr_val = df.loc[date, 'ATR']
+                
+                # Slippage on entry
+                slippage_fee = close_val * self.slippage_penalty
+                entry_price = close_val + slippage_fee
+                
+                # Position sizing
+                allocation_usd = cash_at_start * self.max_alloc * scale
+                
+                if shared_cash >= allocation_usd and allocation_usd > 0:
+                    units = allocation_usd / entry_price
+                    shared_cash -= allocation_usd
                     
-                    # Slippage on entry: we buy slightly higher than close price
-                    # entry_price = Close * (1.0 + slippage)
-                    slippage_fee = close_val * self.slippage_penalty
-                    entry_price = close_val + slippage_fee
+                    # ADAPTIVE VOLATILITY BARRIERS
+                    # If scale (regime score) is high (calm, stable trend), expand TP to 1.2x and keep SL 1.0x
+                    # If scale is low (choppy/volatile), tighten TP to 0.7x and SL to 0.8x
+                    tp_factor = 0.7 + 0.5 * scale  # maps scale=0 -> 0.7, scale=1 -> 1.2
+                    sl_factor = 0.8 + 0.2 * scale  # maps scale=0 -> 0.8, scale=1 -> 1.0
                     
-                    # Position sizing: Allocate % of total equity * volatility scale
-                    allocation_usd = cash_at_start * self.max_alloc * scale
+                    positions[ticker] = {
+                        'units': units,
+                        'entry_price': entry_price,
+                        'entry_time': date,
+                        'sl': entry_price - (self.sl_mult * sl_factor * atr_val),
+                        'tp': entry_price + (self.tp_mult * tp_factor * atr_val),
+                        'entry_atr': atr_val,
+                        'breakeven': False
+                    }
                     
-                    if shared_cash >= allocation_usd and allocation_usd > 0:
-                        units = allocation_usd / entry_price
-                        shared_cash -= allocation_usd
-                        
-                        positions[ticker] = {
-                            'units': units,
-                            'entry_price': entry_price,
-                            'entry_time': date,
-                            'sl': entry_price - (self.sl_mult * atr_val),
-                            'tp': entry_price + (self.tp_mult * atr_val),
-                            'entry_atr': atr_val,
-                            'breakeven': False
-                        }
-                        
-                        # Only notify on the final day of the run (live signal today)
-                        if date == all_dates[-1]:
-                            send_push_notification(
-                                f"🟢 **[BUY]** Enter Long position on **{ticker}** at {entry_price:.2f}.\n"
-                                f"SL: {positions[ticker]['sl']:.2f}, TP: {positions[ticker]['tp']:.2f}"
-                            )
+                    # Only notify on the final day of the run
+                    if date == all_dates[-1]:
+                        send_push_notification(
+                            f"🟢 **[BUY]** Enter Long position on **{ticker}** (AI Confidence: {best_cand['prob']:.1%}) at {entry_price:.2f}.\n"
+                            f"SL: {positions[ticker]['sl']:.2f}, TP: {positions[ticker]['tp']:.2f} (Regime scale: {scale:.2f})"
+                        )
                         
             # Update equity curve index point (re-calculate with actual entries/exits)
             current_equity = shared_cash

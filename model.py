@@ -65,6 +65,46 @@ class EnsembleTradingModel:
             random_state=42
         )
         self.meta_model_trained = False
+        self.active_features = None
+        self.active_features_pruned = False
+
+    def prune_features(self, X, y):
+        """
+        Ranks features using a Random Forest classifier's built-in importances,
+        and selects the top 75% (dropping the bottom 25% of features to prevent overfitting).
+        """
+        from sklearn.ensemble import RandomForestClassifier
+        from security import logger
+        
+        valid_idx = X.notna().all(axis=1) & y.notna()
+        X_clean = X[valid_idx]
+        y_clean = y[valid_idx]
+        
+        if len(y_clean) < 100:
+            logger.warning("Insufficient samples to run feature pruning. Using all features.")
+            return list(X.columns)
+            
+        logger.info("Running dynamic feature importance evaluation...")
+        
+        # Fit a temporary Random Forest to get feature importances
+        temp_rf = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+        temp_rf.fit(X_clean, y_clean)
+        
+        importances = temp_rf.feature_importances_
+        feature_names = list(X_clean.columns)
+        
+        # Sort features by importance
+        feature_importance_tuples = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)
+        
+        # Determine number of features to keep (keep top 75%, drop bottom 25%)
+        num_keep = max(5, int(len(feature_names) * 0.75)) # Keep at least 5 features
+        selected_features = [f[0] for f in feature_importance_tuples[:num_keep]]
+        dropped_features = [f[0] for f in feature_importance_tuples[num_keep:]]
+        
+        logger.info(f"Feature Pruning Complete. Top {len(selected_features)} Features Selected: {selected_features}")
+        logger.info(f"Dropped {len(dropped_features)} redundant/noisy features: {dropped_features}")
+        
+        return selected_features
 
     def fit(self, X, y):
         """Trains all available sub-models on historical feature set."""
@@ -77,6 +117,13 @@ class EnsembleTradingModel:
         if len(y_clean) == 0:
             raise ValueError("No valid training samples after removing NaNs.")
             
+        # Ensure feature pruning runs if it hasn't run yet
+        if not self.active_features_pruned:
+            self.active_features = self.prune_features(X_clean, y_clean)
+            self.active_features_pruned = True
+            
+        X_clean_pruned = X_clean[self.active_features]
+        
         # Ensure classifiers are calibrated
         if not isinstance(self.rf_model, CalibratedClassifierCV):
             self.rf_model = CalibratedClassifierCV(estimator=self.rf_model, method='sigmoid', cv=3)
@@ -86,13 +133,13 @@ class EnsembleTradingModel:
             self.cb_model = CalibratedClassifierCV(estimator=self.cb_model, method='sigmoid', cv=3)
             
         # Fit standard models
-        self.rf_model.fit(X_clean, y_clean)
-        self.gb_model.fit(X_clean, y_clean)
-        self.lr_model.fit(X_clean, y_clean)
+        self.rf_model.fit(X_clean_pruned, y_clean)
+        self.gb_model.fit(X_clean_pruned, y_clean)
+        self.lr_model.fit(X_clean_pruned, y_clean)
         
         # Fit CatBoost if available
         if self.cb_available:
-            self.cb_model.fit(X_clean, y_clean)
+            self.cb_model.fit(X_clean_pruned, y_clean)
 
     def fit_meta_model(self, X, y):
         """
@@ -122,18 +169,24 @@ class EnsembleTradingModel:
         if self.cb_available and not isinstance(self.cb_model, CalibratedClassifierCV):
             self.cb_model = CalibratedClassifierCV(estimator=self.cb_model, method='sigmoid', cv=3)
             
+        # Filter features using self.active_features if pruned
+        if self.active_features_pruned:
+            X_clean_pruned = X_clean[self.active_features]
+        else:
+            X_clean_pruned = X_clean
+            
         # Generate primary model signal probabilities out-of-fold
         oof_probs = np.zeros(len(X_clean))
         kf = KFold(n_splits=3, shuffle=False)
         
-        for train_idx, val_idx in kf.split(X_clean):
+        for train_idx, val_idx in kf.split(X_clean_pruned):
             # Clone primary models (prevent state leakage)
             rf_c = clone(self.rf_model)
             gb_c = clone(self.gb_model)
             lr_c = clone(self.lr_model)
             
-            X_tr, y_tr = X_clean.iloc[train_idx], y_clean.iloc[train_idx]
-            X_val = X_clean.iloc[val_idx]
+            X_tr, y_tr = X_clean_pruned.iloc[train_idx], y_clean.iloc[train_idx]
+            X_val = X_clean_pruned.iloc[val_idx]
             
             # Fit clones
             rf_c.fit(X_tr, y_tr)
@@ -157,7 +210,7 @@ class EnsembleTradingModel:
         # Identify where primary model generates BUY signals
         buy_signal_mask = oof_probs >= self.confidence_threshold
         
-        X_meta = X_clean[buy_signal_mask]
+        X_meta = X_clean_pruned[buy_signal_mask]
         y_meta = y_clean[buy_signal_mask]
         
         # We need a minimum number of trade samples with both classes (0 and 1)
@@ -177,12 +230,17 @@ class EnsembleTradingModel:
         if not hasattr(self.rf_model, "classes_"):
             raise ValueError("Model is not trained yet. Call fit() first.")
             
-        p_rf = self.rf_model.predict_proba(X)[:, 1]
-        p_gb = self.gb_model.predict_proba(X)[:, 1]
-        p_lr = self.lr_model.predict_proba(X)[:, 1]
+        if self.active_features_pruned:
+            X_pruned = X[self.active_features]
+        else:
+            X_pruned = X
+            
+        p_rf = self.rf_model.predict_proba(X_pruned)[:, 1]
+        p_gb = self.gb_model.predict_proba(X_pruned)[:, 1]
+        p_lr = self.lr_model.predict_proba(X_pruned)[:, 1]
         
         if self.cb_available:
-            p_cb = self.cb_model.predict_proba(X)[:, 1]
+            p_cb = self.cb_model.predict_proba(X_pruned)[:, 1]
             probs = (p_rf + p_gb + p_lr + p_cb) / 4.0
         else:
             probs = (p_rf + p_gb + p_lr) / 3.0
@@ -195,7 +253,7 @@ class EnsembleTradingModel:
         # 2. Filter primary signals with De Prado's Meta-model
         if self.meta_model_trained and np.any(buy_mask):
             # Only evaluate rows where primary model says BUY
-            meta_probs = self.meta_model.predict_proba(X)[:, 1]
+            meta_probs = self.meta_model.predict_proba(X_pruned)[:, 1]
             
             # Keep BUY only if meta-model probability of success is >= 50%
             filtered_buy_mask = buy_mask & (meta_probs >= 0.5)
@@ -217,12 +275,17 @@ class EnsembleTradingModel:
         X_clean = X_test[valid_idx]
         y_clean = y_test[valid_idx]
         
-        p_rf = self.rf_model.predict_proba(X_clean)[:, 1]
-        p_gb = self.gb_model.predict_proba(X_clean)[:, 1]
-        p_lr = self.lr_model.predict_proba(X_clean)[:, 1]
+        if self.active_features_pruned:
+            X_clean_pruned = X_clean[self.active_features]
+        else:
+            X_clean_pruned = X_clean
+            
+        p_rf = self.rf_model.predict_proba(X_clean_pruned)[:, 1]
+        p_gb = self.gb_model.predict_proba(X_clean_pruned)[:, 1]
+        p_lr = self.lr_model.predict_proba(X_clean_pruned)[:, 1]
         
         if self.cb_available:
-            p_cb = self.cb_model.predict_proba(X_clean)[:, 1]
+            p_cb = self.cb_model.predict_proba(X_clean_pruned)[:, 1]
             probs = (p_rf + p_gb + p_lr + p_cb) / 4.0
         else:
             probs = (p_rf + p_gb + p_lr) / 3.0
@@ -262,6 +325,7 @@ class EnsembleTradingModel:
         from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
         from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
         from security import logger
+        from sklearn.calibration import CalibratedClassifierCV
         
         logger.info("Initializing hyperparameter auto-tuning on pooled training data...")
         
@@ -273,6 +337,13 @@ class EnsembleTradingModel:
             logger.warning("Insufficient training samples to run hyperparameter tuning. Keeping default parameters.")
             return
             
+        # Ensure feature pruning runs first if it hasn't yet
+        if not self.active_features_pruned:
+            self.active_features = self.prune_features(X_clean, y_clean)
+            self.active_features_pruned = True
+            
+        X_clean_pruned = X_clean[self.active_features]
+        
         # Chronological cross-validation to prevent leakage
         tscv = TimeSeriesSplit(n_splits=3)
         
@@ -292,9 +363,8 @@ class EnsembleTradingModel:
             random_state=42,
             n_jobs=-1
         )
-        from sklearn.calibration import CalibratedClassifierCV
         try:
-            rf_search.fit(X_clean, y_clean)
+            rf_search.fit(X_clean_pruned, y_clean)
             self.rf_model = CalibratedClassifierCV(estimator=rf_search.best_estimator_, method='sigmoid', cv=3)
             logger.info(f"RF Auto-Tuning Complete. Best Params: {rf_search.best_params_}")
         except Exception as e:
@@ -317,7 +387,7 @@ class EnsembleTradingModel:
             n_jobs=-1
         )
         try:
-            gb_search.fit(X_clean, y_clean)
+            gb_search.fit(X_clean_pruned, y_clean)
             self.gb_model = CalibratedClassifierCV(estimator=gb_search.best_estimator_, method='sigmoid', cv=3)
             logger.info(f"GBDT Auto-Tuning Complete. Best Params: {gb_search.best_params_}")
         except Exception as e:
@@ -342,7 +412,7 @@ class EnsembleTradingModel:
                     random_state=42,
                     n_jobs=-1
                 )
-                cb_search.fit(X_clean, y_clean)
+                cb_search.fit(X_clean_pruned, y_clean)
                 self.cb_model = CalibratedClassifierCV(estimator=cb_search.best_estimator_, method='sigmoid', cv=3)
                 logger.info(f"CatBoost Auto-Tuning Complete. Best Params: {cb_search.best_params_}")
             except Exception as e:

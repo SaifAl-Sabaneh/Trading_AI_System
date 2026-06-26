@@ -150,6 +150,7 @@ def main():
     test_dfs_dict = {}
     test_allowance_dict = {}
     test_signals_dict = {}
+    test_probs_dict = {}
     
     for ticker, df in processed_dfs.items():
         split_idx = int(len(df) * config.TRAIN_TEST_SPLIT_RATIO)
@@ -161,8 +162,9 @@ def main():
         # Collect test dates for walk-forward execution
         test_dates_set.update(test_df.index)
         
-        # Initialize empty signals array for test set
+        # Initialize empty signals and probs arrays for test set
         test_signals_dict[ticker] = np.zeros(len(test_df))
+        test_probs_dict[ticker] = np.zeros(len(test_df))
         
     # Chronological unique dates in the test partition
     test_dates = sorted(list(test_dates_set))
@@ -230,18 +232,19 @@ def main():
                 X_today = df_test.loc[[t], feature_columns]
                 
                 # Predict signal
-                sig, _ = ensemble.predict_signals(X_today)
+                sig, probs = ensemble.predict_signals(X_today)
                 
                 # Store signal in signals array (find row index of date 't' in test set)
                 row_idx = df_test.index.get_loc(t)
                 test_signals_dict[ticker][row_idx] = sig[0]
+                test_probs_dict[ticker][row_idx] = probs[0]
                 
     logger.info("Daily walk-forward retraining loop completed.")
     
     # 4. Layer 3: Run Portfolio Backtester with Slippage & Circuit Breaker
     logger.info("Initializing multi-asset portfolio backtest...")
     backtester = PortfolioBacktester()
-    equity_series, trade_log = backtester.run(test_dfs_dict, test_signals_dict, test_allowance_dict)
+    equity_series, trade_log = backtester.run(test_dfs_dict, test_signals_dict, test_allowance_dict, test_probs_dict)
     
     # Analyze portfolio metrics
     metrics = backtester.analyze_performance(equity_series, trade_log, test_dfs_dict)
