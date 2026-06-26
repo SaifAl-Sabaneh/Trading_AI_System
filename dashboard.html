@@ -96,6 +96,7 @@
                         <thead>
                             <tr class="border-b border-slate-800 text-slate-400 font-semibold text-xs tracking-wider uppercase">
                                 <th class="pb-2">Ticker</th>
+                                <th class="pb-2">Type</th>
                                 <th class="pb-2">Entry</th>
                                 <th class="pb-2">Exit</th>
                                 <th class="pb-2">Entry Price</th>
@@ -198,16 +199,18 @@
             // 4. Populate Trades Table
             const tbody = document.getElementById("trades-tbody");
             if (state.trades.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-500">No trades executed during this timeframe.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="py-6 text-center text-slate-500">No trades executed during this timeframe.</td></tr>`;
             } else {
                 state.trades.forEach(t => {
                     const row = document.createElement("tr");
                     row.className = "hover:bg-slate-800/10 transition-colors";
                     
                     const pnlClass = t.pnl_pct > 0 ? "text-emerald-400" : (t.pnl_pct < 0 ? "text-rose-500" : "text-slate-400");
+                    const typeClass = t.direction === "Long" ? "text-emerald-400 bg-emerald-950/20 border-emerald-900/30" : "text-rose-400 bg-rose-950/20 border-rose-900/30";
                     
                     row.innerHTML = `
                         <td class="py-3 font-semibold text-white">${t.ticker}</td>
+                        <td class="py-3"><span class="px-2 py-0.5 rounded text-xs border ${typeClass}">${t.direction || 'Long'}</span></td>
                         <td class="py-3 text-slate-400">${t.entry_time}</td>
                         <td class="py-3 text-slate-400">${t.exit_time}</td>
                         <td class="py-3 text-slate-300">$${t.entry_price.toFixed(2)}</td>

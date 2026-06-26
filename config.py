@@ -22,6 +22,7 @@ LOOKBACK_PERCENTILE = 200      # Lookback window for computing rolling percentil
 
 USE_TREND_FILTER = True        # Only buy when price is above SMA_TREND_WINDOW
 SMA_TREND_WINDOW = 200         # Window for long-term trend filter
+EMA_TREND_WINDOW = 50          # Window for medium-term trend confirmation
 
 # ----------------- LAYER 2: ML ENSEMBLE CLASSIFIER -----------------
 FORECAST_HORIZON = 10          # Prediction lookforward horizon (e.g., 10 days for Triple Barrier)
@@ -32,6 +33,8 @@ CONFIDENCE_THRESHOLD = 0.35    # Strict confidence threshold for signals (calibr
 # ----------------- ADVANCED ML UPGRADES -----------------
 USE_SENTIMENT = True              # Use Crypto Fear & Greed Index daily sentiment features
 RUN_HYPERPARAMETER_TUNING = True  # Auto-optimize model parameters using RandomizedSearchCV
+FEAR_GREED_GREED_CAP = 85         # Extreme greed cap (blocks long entries)
+FEAR_GREED_FEAR_FLOOR = 15        # Extreme fear floor (blocks short entries)
 
 
 # ----------------- LAYER 3: EXECUTION & POSITION SIZING -----------------

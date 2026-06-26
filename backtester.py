@@ -50,10 +50,17 @@ class PortfolioBacktester:
             current_equity = shared_cash
             for ticker in positions:
                 df = test_dfs[ticker]
+                pos = positions[ticker]
+                is_long = pos.get('direction', 'long') == 'long'
                 if date in df.index:
-                    current_equity += positions[ticker]['units'] * df.loc[date, 'Close']
+                    curr_price = df.loc[date, 'Close']
                 else:
-                    current_equity += positions[ticker]['units'] * positions[ticker]['entry_price']
+                    curr_price = pos['entry_price']
+                
+                if is_long:
+                    current_equity += pos['units'] * curr_price
+                else:
+                    current_equity += (pos['units'] * pos['entry_price']) + (pos['units'] * (pos['entry_price'] - curr_price))
             
             # Record equity
             self.portfolio_equity.append(current_equity)
@@ -82,20 +89,30 @@ class PortfolioBacktester:
                     pos = positions[ticker]
                     df = test_dfs[ticker]
                     close_val = df.loc[date, 'Close'] if date in df.index else pos['entry_price']
+                    is_long = pos.get('direction', 'long') == 'long'
                     
-                    # Deduct slippage on emergency exit
-                    pnl_pct = (close_val - pos['entry_price']) / pos['entry_price'] - self.slippage_penalty
-                    exit_val = pos['units'] * close_val * (1.0 - self.slippage_penalty)
-                    shared_cash += exit_val
+                    if is_long:
+                        pnl_pct = (close_val - pos['entry_price']) / pos['entry_price'] - self.slippage_penalty
+                        exit_val = pos['units'] * close_val * (1.0 - self.slippage_penalty)
+                        pnl_usd = exit_val - (pos['units'] * pos['entry_price'])
+                        shared_cash += exit_val
+                        exit_price = close_val * (1.0 - self.slippage_penalty)
+                    else:
+                        exit_price_net = close_val * (1.0 + self.slippage_penalty)
+                        pnl_pct = (pos['entry_price'] - exit_price_net) / pos['entry_price']
+                        pnl_usd = pos['units'] * (pos['entry_price'] - exit_price_net)
+                        shared_cash += (pos['units'] * pos['entry_price']) + pnl_usd
+                        exit_price = exit_price_net
                     
                     self.trade_log.append({
                         'Ticker': ticker,
                         'EntryTime': pos['entry_time'],
                         'ExitTime': date,
+                        'Direction': 'Long' if is_long else 'Short',
                         'EntryPrice': pos['entry_price'],
-                        'ExitPrice': close_val * (1.0 - self.slippage_penalty),
+                        'ExitPrice': exit_price,
                         'PnL_Pct': pnl_pct,
-                        'PnL_USD': exit_val - (pos['units'] * pos['entry_price']),
+                        'PnL_USD': pnl_usd,
                         'ExitReason': 'Emergency_Circuit_Breaker'
                     })
                     del positions[ticker]
@@ -119,8 +136,14 @@ class PortfolioBacktester:
                 date_idx = df.index.get_loc(date)
                 sig = test_signals_dict[ticker][date_idx]
                 
-                stopped_out = low_val <= pos['sl']
-                target_hit = high_val >= pos['tp']
+                is_long = pos.get('direction', 'long') == 'long'
+                
+                if is_long:
+                    stopped_out = low_val <= pos['sl']
+                    target_hit = high_val >= pos['tp']
+                else:
+                    stopped_out = high_val >= pos['sl']
+                    target_hit = low_val <= pos['tp']
                 
                 exit_triggered = False
                 exit_price = 0.0
@@ -131,33 +154,38 @@ class PortfolioBacktester:
                     target_hit = False
                 
                 if stopped_out:
-                    exit_price = min(pos['sl'], open_val)
+                    exit_price = min(pos['sl'], open_val) if is_long else max(pos['sl'], open_val)
                     reason = "SL"
                     exit_triggered = True
                 elif target_hit:
-                    exit_price = max(pos['tp'], open_val)
+                    exit_price = max(pos['tp'], open_val) if is_long else min(pos['tp'], open_val)
                     reason = "TP"
                     exit_triggered = True
-                elif sig == -1:
+                elif (is_long and sig == -1) or (not is_long and sig == 1):
                     exit_price = close_val
                     reason = "Signal_Exit"
                     exit_triggered = True
                     
                 if exit_triggered:
-                    # Apply slippage penalty to PnL and exit value
-                    # Slippage reduces exit price if selling: final_exit_price = exit_price * (1.0 - slippage)
-                    slippage_fee = exit_price * self.slippage_penalty
-                    final_exit_price = exit_price - slippage_fee
-                    
-                    pnl_pct = (final_exit_price - pos['entry_price']) / pos['entry_price']
-                    pnl_usd = pos['units'] * (final_exit_price - pos['entry_price'])
-                    
-                    shared_cash += pos['units'] * final_exit_price
+                    # Apply slippage penalty
+                    if is_long:
+                        slippage_fee = exit_price * self.slippage_penalty
+                        final_exit_price = exit_price - slippage_fee
+                        pnl_pct = (final_exit_price - pos['entry_price']) / pos['entry_price']
+                        pnl_usd = pos['units'] * (final_exit_price - pos['entry_price'])
+                        shared_cash += pos['units'] * final_exit_price
+                    else:
+                        slippage_fee = exit_price * self.slippage_penalty
+                        final_exit_price = exit_price + slippage_fee
+                        pnl_pct = (pos['entry_price'] - final_exit_price) / pos['entry_price']
+                        pnl_usd = pos['units'] * (pos['entry_price'] - final_exit_price)
+                        shared_cash += (pos['units'] * pos['entry_price']) + pnl_usd
                     
                     self.trade_log.append({
                         'Ticker': ticker,
                         'EntryTime': pos['entry_time'],
                         'ExitTime': date,
+                        'Direction': 'Long' if is_long else 'Short',
                         'EntryPrice': pos['entry_price'],
                         'ExitPrice': final_exit_price,
                         'PnL_Pct': pnl_pct,
@@ -168,16 +196,21 @@ class PortfolioBacktester:
                     # Only notify on the final day of the run (live signal today)
                     if date == all_dates[-1]:
                         send_push_notification(
-                            f"🔴 **[EXIT]** Closed position on **{ticker}** at {final_exit_price:.2f} due to {reason}.\n"
+                            f"🔴 **[EXIT]** Closed {'Long' if is_long else 'Short'} position on **{ticker}** at {final_exit_price:.2f} due to {reason}.\n"
                             f"PnL: {pnl_pct:.2%} (${pnl_usd:.2f})"
                         )
                     del positions[ticker]
                 else:
                     # Trailing & Breakeven updates
                     if self.enable_breakeven and not pos['breakeven']:
-                        if high_val >= (pos['entry_price'] + pos['entry_atr']):
-                            positions[ticker]['sl'] = pos['entry_price']
-                            positions[ticker]['breakeven'] = True
+                        if is_long:
+                            if high_val >= (pos['entry_price'] + pos['entry_atr']):
+                                positions[ticker]['sl'] = pos['entry_price']
+                                positions[ticker]['breakeven'] = True
+                        else:
+                            if low_val <= (pos['entry_price'] - pos['entry_atr']):
+                                positions[ticker]['sl'] = pos['entry_price']
+                                positions[ticker]['breakeven'] = True
             
             # 5. EVALUATE NEW ENTRIES WITH CROSS-ASSET RELATIVE STRENGTH RANKING
             cash_at_start = current_equity  # Position size is based on total account equity
@@ -192,63 +225,82 @@ class PortfolioBacktester:
                 sig = test_signals_dict[ticker][date_idx]
                 scale = test_allowance_dict[ticker][date_idx]
                 
-                if sig == 1 and scale > 0.0:
+                if (sig == 1 or sig == -1) and scale > 0.0:
                     prob = 0.5
                     if test_probs_dict is not None and ticker in test_probs_dict:
                         prob = test_probs_dict[ticker][date_idx]
+                    
+                    # Compute entry strength (higher probability for long, lower for short)
+                    strength = prob if sig == 1 else (1.0 - prob)
                     candidates.append({
                         'ticker': ticker,
                         'prob': prob,
+                        'strength': strength,
+                        'sig': sig,
                         'scale': scale,
                         'df': df,
                         'date_idx': date_idx
                     })
             
-            # Sort candidates by predicted probability in descending order (relative strength ranking)
-            candidates = sorted(candidates, key=lambda x: x['prob'], reverse=True)
+            # Sort candidates by strength in descending order (relative strength ranking)
+            candidates = sorted(candidates, key=lambda x: x['strength'], reverse=True)
             
-            # Execute only the single highest probability candidate to avoid capital dilution
+            # Execute only the single highest strength candidate to avoid capital dilution
             if candidates:
                 best_cand = candidates[0]
                 ticker = best_cand['ticker']
                 df = best_cand['df']
                 scale = best_cand['scale']
+                sig = best_cand['sig']
                 date_idx = best_cand['date_idx']
                 
                 close_val = df.loc[date, 'Close']
                 atr_val = df.loc[date, 'ATR']
                 
-                # Slippage on entry
-                slippage_fee = close_val * self.slippage_penalty
-                entry_price = close_val + slippage_fee
-                
                 # Position sizing
                 allocation_usd = cash_at_start * self.max_alloc * scale
                 
                 if shared_cash >= allocation_usd and allocation_usd > 0:
-                    units = allocation_usd / entry_price
-                    shared_cash -= allocation_usd
-                    
-                    # ADAPTIVE VOLATILITY BARRIERS
-                    # If scale (regime score) is high (calm, stable trend), expand TP to 1.2x and keep SL 1.0x
-                    # If scale is low (choppy/volatile), tighten TP to 0.7x and SL to 0.8x
                     tp_factor = 0.7 + 0.5 * scale  # maps scale=0 -> 0.7, scale=1 -> 1.2
                     sl_factor = 0.8 + 0.2 * scale  # maps scale=0 -> 0.8, scale=1 -> 1.0
                     
-                    positions[ticker] = {
-                        'units': units,
-                        'entry_price': entry_price,
-                        'entry_time': date,
-                        'sl': entry_price - (self.sl_mult * sl_factor * atr_val),
-                        'tp': entry_price + (self.tp_mult * tp_factor * atr_val),
-                        'entry_atr': atr_val,
-                        'breakeven': False
-                    }
+                    if sig == 1:
+                        # Enter Long
+                        entry_price = close_val * (1.0 + self.slippage_penalty)
+                        units = allocation_usd / entry_price
+                        shared_cash -= allocation_usd
+                        
+                        positions[ticker] = {
+                            'units': units,
+                            'entry_price': entry_price,
+                            'entry_time': date,
+                            'direction': 'long',
+                            'sl': entry_price - (self.sl_mult * sl_factor * atr_val),
+                            'tp': entry_price + (self.tp_mult * tp_factor * atr_val),
+                            'entry_atr': atr_val,
+                            'breakeven': False
+                        }
+                    else:
+                        # Enter Short
+                        entry_price = close_val * (1.0 - self.slippage_penalty)
+                        units = allocation_usd / entry_price
+                        shared_cash -= allocation_usd
+                        
+                        positions[ticker] = {
+                            'units': units,
+                            'entry_price': entry_price,
+                            'entry_time': date,
+                            'direction': 'short',
+                            'sl': entry_price + (self.sl_mult * sl_factor * atr_val),
+                            'tp': entry_price - (self.tp_mult * tp_factor * atr_val),
+                            'entry_atr': atr_val,
+                            'breakeven': False
+                        }
                     
                     # Only notify on the final day of the run
                     if date == all_dates[-1]:
                         send_push_notification(
-                            f"🟢 **[BUY]** Enter Long position on **{ticker}** (AI Confidence: {best_cand['prob']:.1%}) at {entry_price:.2f}.\n"
+                            f"🟢 **[ENTRY]** Enter {'Long' if sig == 1 else 'Short'} position on **{ticker}** (AI Confidence: {best_cand['prob']:.1%}) at {entry_price:.2f}.\n"
                             f"SL: {positions[ticker]['sl']:.2f}, TP: {positions[ticker]['tp']:.2f} (Regime scale: {scale:.2f})"
                         )
                         
@@ -256,27 +308,42 @@ class PortfolioBacktester:
             current_equity = shared_cash
             for ticker in positions:
                 df = test_dfs[ticker]
+                pos = positions[ticker]
+                is_long = pos.get('direction', 'long') == 'long'
                 if date in df.index:
-                    current_equity += positions[ticker]['units'] * df.loc[date, 'Close']
+                    curr_price = df.loc[date, 'Close']
                 else:
-                    current_equity += positions[ticker]['units'] * positions[ticker]['entry_price']
+                    curr_price = pos['entry_price']
+                
+                if is_long:
+                    current_equity += pos['units'] * curr_price
+                else:
+                    current_equity += (pos['units'] * pos['entry_price']) + (pos['units'] * (pos['entry_price'] - curr_price))
             self.portfolio_equity[-1] = current_equity
-
+ 
         # Force close any open positions at the end of the simulation
         final_date = all_dates[-1]
         for ticker in list(positions.keys()):
             pos = positions[ticker]
             close_val = test_dfs[ticker].loc[final_date, 'Close']
+            is_long = pos.get('direction', 'long') == 'long'
             
-            final_exit = close_val * (1.0 - self.slippage_penalty)
-            pnl_pct = (final_exit - pos['entry_price']) / pos['entry_price']
-            pnl_usd = pos['units'] * (final_exit - pos['entry_price'])
-            shared_cash += pos['units'] * final_exit
+            if is_long:
+                final_exit = close_val * (1.0 - self.slippage_penalty)
+                pnl_pct = (final_exit - pos['entry_price']) / pos['entry_price']
+                pnl_usd = pos['units'] * (final_exit - pos['entry_price'])
+                shared_cash += pos['units'] * final_exit
+            else:
+                final_exit = close_val * (1.0 + self.slippage_penalty)
+                pnl_pct = (pos['entry_price'] - final_exit) / pos['entry_price']
+                pnl_usd = pos['units'] * (pos['entry_price'] - final_exit)
+                shared_cash += (pos['units'] * pos['entry_price']) + pnl_usd
             
             self.trade_log.append({
                 'Ticker': ticker,
                 'EntryTime': pos['entry_time'],
                 'ExitTime': final_date,
+                'Direction': 'Long' if is_long else 'Short',
                 'EntryPrice': pos['entry_price'],
                 'ExitPrice': final_exit,
                 'PnL_Pct': pnl_pct,
@@ -286,7 +353,7 @@ class PortfolioBacktester:
             del positions[ticker]
             
         self.portfolio_equity[-1] = shared_cash
-
+ 
         return pd.Series(self.portfolio_equity, index=all_dates), pd.DataFrame(self.trade_log)
 
     def analyze_performance(self, equity_series, trade_df, test_dfs):

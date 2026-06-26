@@ -119,15 +119,17 @@ def main():
             regime_filter = MarketRegimeFilter()
             regime_scale = regime_filter.compute_regime_sizing(df_copy)
             
-            # Combine with long-term trend filter (SMA_200) and multi-timeframe filter (4h_Bullish)
-            if config.USE_TREND_FILTER:
-                trend_bullish = df_copy['Close'] > df_copy['SMA_200']
-                df_copy['Entry_Allowed'] = regime_scale * trend_bullish.astype(float) * df_copy['4h_Bullish']
-            else:
-                df_copy['Entry_Allowed'] = regime_scale * df_copy['4h_Bullish']
-                
+            # Setup indicators for dual trend filter & sentiment caps
+            df_copy['EMA_50'] = df_copy['Close'].ewm(span=config.EMA_TREND_WINDOW, adjust=False).mean()
+            df_copy['Trend_Bullish'] = (df_copy['Close'] > df_copy['SMA_200']) & (df_copy['Close'] > df_copy['EMA_50'])
+            df_copy['Trend_Bearish'] = (df_copy['Close'] < df_copy['SMA_200']) & (df_copy['Close'] < df_copy['EMA_50'])
+            df_copy['Long_Sentiment'] = df_copy['Sentiment_Score'] <= config.FEAR_GREED_GREED_CAP
+            df_copy['Short_Sentiment'] = df_copy['Sentiment_Score'] >= config.FEAR_GREED_FEAR_FLOOR
+            df_copy['Regime_Scale'] = regime_scale
+            df_copy['Entry_Allowed'] = regime_scale  # default placeholder, will overwrite dynamically
+            
             # Remove NaNs
-            df_clean = df_copy.dropna(subset=feature_cols + ['SMA_200']).copy()
+            df_clean = df_copy.dropna(subset=feature_cols + ['SMA_200', 'EMA_50']).copy()
             
             if len(df_clean) < 150:
                 logger.warning(f"Ticker {ticker} has insufficient data rows ({len(df_clean)}). Skipping.")
@@ -157,7 +159,7 @@ def main():
         test_df = df.iloc[split_idx:].copy()
         
         test_dfs_dict[ticker] = test_df
-        test_allowance_dict[ticker] = test_df['Entry_Allowed'].values
+        test_allowance_dict[ticker] = np.zeros(len(test_df))
         
         # Collect test dates for walk-forward execution
         test_dates_set.update(test_df.index)
@@ -239,6 +241,31 @@ def main():
                 test_signals_dict[ticker][row_idx] = sig[0]
                 test_probs_dict[ticker][row_idx] = probs[0]
                 
+                # Dynamic direction-aware and sentiment-filtered entry allowance
+                regime_val = df_test.loc[t, 'Regime_Scale']
+                mt_bullish_val = df_test.loc[t, '4h_Bullish']
+                
+                if sig[0] == 1:
+                    # Long entry filters
+                    if config.USE_TREND_FILTER:
+                        trend_ok = df_test.loc[t, 'Trend_Bullish'] and (mt_bullish_val == 1.0)
+                    else:
+                        trend_ok = (mt_bullish_val == 1.0)
+                    sent_ok = df_test.loc[t, 'Long_Sentiment']
+                    allowed = regime_val if (trend_ok and sent_ok) else 0.0
+                elif sig[0] == -1:
+                    # Short entry filters
+                    if config.USE_TREND_FILTER:
+                        trend_ok = df_test.loc[t, 'Trend_Bearish'] and (mt_bullish_val == 0.0)
+                    else:
+                        trend_ok = (mt_bullish_val == 0.0)
+                    sent_ok = df_test.loc[t, 'Short_Sentiment']
+                    allowed = regime_val if (trend_ok and sent_ok) else 0.0
+                else:
+                    allowed = 0.0
+                    
+                test_allowance_dict[ticker][row_idx] = allowed
+                
     logger.info("Daily walk-forward retraining loop completed.")
     
     # 4. Layer 3: Run Portfolio Backtester with Slippage & Circuit Breaker
@@ -252,7 +279,7 @@ def main():
     # 5. Print Trade Log Sample
     if len(trade_log) > 0:
         logger.info("\nExecuted Portfolio Trades (Slippage Adjusted):")
-        cols_to_print = ['Ticker', 'EntryTime', 'ExitTime', 'EntryPrice', 'ExitPrice', 'PnL_Pct', 'PnL_USD', 'ExitReason']
+        cols_to_print = ['Ticker', 'Direction', 'EntryTime', 'ExitTime', 'EntryPrice', 'ExitPrice', 'PnL_Pct', 'PnL_USD', 'ExitReason']
         logger.info("\n" + trade_log[cols_to_print].to_string())
     else:
         logger.info("\nNo trades were executed. The system protected capital by staying in cash.")
@@ -328,6 +355,7 @@ def main():
         for _, row in trade_log.iterrows():
             trades_list.append({
                 "ticker": str(row['Ticker']),
+                "direction": str(row.get('Direction', 'Long')),
                 "entry_time": row['EntryTime'].strftime("%Y-%m-%d") if isinstance(row['EntryTime'], pd.Timestamp) else str(row['EntryTime']),
                 "exit_time": row['ExitTime'].strftime("%Y-%m-%d") if isinstance(row['ExitTime'], pd.Timestamp) else str(row['ExitTime']),
                 "entry_price": float(row['EntryPrice']),
