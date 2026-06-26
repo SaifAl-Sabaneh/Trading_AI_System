@@ -56,15 +56,34 @@ class EnsembleTradingModel:
         except ImportError:
             self.cb_available = False
             logger.warning("CatBoost library not found. Stacking ensemble running on GBDT, RF, and LR.")
+            
+        # Meta-labeler secondary model
+        self.meta_model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=4,
+            class_weight="balanced",
+            random_state=42
+        )
+        self.meta_model_trained = False
 
     def fit(self, X, y):
         """Trains all available sub-models on historical feature set."""
+        from sklearn.calibration import CalibratedClassifierCV
+        
         valid_idx = X.notna().all(axis=1) & y.notna()
         X_clean = X[valid_idx]
         y_clean = y[valid_idx]
         
         if len(y_clean) == 0:
             raise ValueError("No valid training samples after removing NaNs.")
+            
+        # Ensure classifiers are calibrated
+        if not isinstance(self.rf_model, CalibratedClassifierCV):
+            self.rf_model = CalibratedClassifierCV(estimator=self.rf_model, method='sigmoid', cv=3)
+        if not isinstance(self.gb_model, CalibratedClassifierCV):
+            self.gb_model = CalibratedClassifierCV(estimator=self.gb_model, method='sigmoid', cv=3)
+        if self.cb_available and not isinstance(self.cb_model, CalibratedClassifierCV):
+            self.cb_model = CalibratedClassifierCV(estimator=self.cb_model, method='sigmoid', cv=3)
             
         # Fit standard models
         self.rf_model.fit(X_clean, y_clean)
@@ -75,9 +94,85 @@ class EnsembleTradingModel:
         if self.cb_available:
             self.cb_model.fit(X_clean, y_clean)
 
+    def fit_meta_model(self, X, y):
+        """
+        Fits De Prado's meta-labeler on out-of-fold predictions.
+        Trains a secondary classifier to verify primary high-confidence signals.
+        """
+        from sklearn.model_selection import KFold
+        from sklearn.base import clone
+        from security import logger
+        from sklearn.calibration import CalibratedClassifierCV
+        
+        valid_idx = X.notna().all(axis=1) & y.notna()
+        X_clean = X[valid_idx]
+        y_clean = y[valid_idx]
+        
+        # If too few samples, don't attempt meta-labeler training
+        if len(y_clean) < 150:
+            logger.warning("Insufficient samples to train secondary meta-model. Skipping.")
+            self.meta_model_trained = False
+            return
+            
+        # Ensure self.rf_model, etc. are calibrated before cloning
+        if not isinstance(self.rf_model, CalibratedClassifierCV):
+            self.rf_model = CalibratedClassifierCV(estimator=self.rf_model, method='sigmoid', cv=3)
+        if not isinstance(self.gb_model, CalibratedClassifierCV):
+            self.gb_model = CalibratedClassifierCV(estimator=self.gb_model, method='sigmoid', cv=3)
+        if self.cb_available and not isinstance(self.cb_model, CalibratedClassifierCV):
+            self.cb_model = CalibratedClassifierCV(estimator=self.cb_model, method='sigmoid', cv=3)
+            
+        # Generate primary model signal probabilities out-of-fold
+        oof_probs = np.zeros(len(X_clean))
+        kf = KFold(n_splits=3, shuffle=False)
+        
+        for train_idx, val_idx in kf.split(X_clean):
+            # Clone primary models (prevent state leakage)
+            rf_c = clone(self.rf_model)
+            gb_c = clone(self.gb_model)
+            lr_c = clone(self.lr_model)
+            
+            X_tr, y_tr = X_clean.iloc[train_idx], y_clean.iloc[train_idx]
+            X_val = X_clean.iloc[val_idx]
+            
+            # Fit clones
+            rf_c.fit(X_tr, y_tr)
+            gb_c.fit(X_tr, y_tr)
+            lr_c.fit(X_tr, y_tr)
+            
+            p_rf = rf_c.predict_proba(X_val)[:, 1]
+            p_gb = gb_c.predict_proba(X_val)[:, 1]
+            p_lr = lr_c.predict_proba(X_val)[:, 1]
+            
+            if self.cb_available:
+                cb_c = clone(self.cb_model)
+                cb_c.fit(X_tr, y_tr)
+                p_cb = cb_c.predict_proba(X_val)[:, 1]
+                probs = (p_rf + p_gb + p_lr + p_cb) / 4.0
+            else:
+                probs = (p_rf + p_gb + p_lr) / 3.0
+                
+            oof_probs[val_idx] = probs
+            
+        # Identify where primary model generates BUY signals
+        buy_signal_mask = oof_probs >= self.confidence_threshold
+        
+        X_meta = X_clean[buy_signal_mask]
+        y_meta = y_clean[buy_signal_mask]
+        
+        # We need a minimum number of trade samples with both classes (0 and 1)
+        if len(y_meta) < 15 or len(y_meta.unique()) < 2:
+            logger.warning(f"OOF generated only {len(y_meta)} buy signals. Insufficient diversity to train meta-model. Skipping.")
+            self.meta_model_trained = False
+        else:
+            self.meta_model.fit(X_meta, y_meta)
+            self.meta_model_trained = True
+            logger.info(f"Meta-labeling model trained successfully on {len(y_meta)} historical trades.")
+
     def predict_signals(self, X):
         """
         Generates directional signals by averaging predictions across all ensemble models.
+        Applies De Prado's meta-model checks to filter out high-probability losses.
         """
         if not hasattr(self.rf_model, "classes_"):
             raise ValueError("Model is not trained yet. Call fit() first.")
@@ -88,18 +183,27 @@ class EnsembleTradingModel:
         
         if self.cb_available:
             p_cb = self.cb_model.predict_proba(X)[:, 1]
-            # Average 4 models
             probs = (p_rf + p_gb + p_lr + p_cb) / 4.0
         else:
-            # Average 3 models
             probs = (p_rf + p_gb + p_lr) / 3.0
             
         signals = np.zeros(len(X))
         
-        # Apply strict confidence thresholds
+        # 1. Primary Model checks
         buy_mask = probs >= self.confidence_threshold
-        signals[buy_mask] = 1
         
+        # 2. Filter primary signals with De Prado's Meta-model
+        if self.meta_model_trained and np.any(buy_mask):
+            # Only evaluate rows where primary model says BUY
+            meta_probs = self.meta_model.predict_proba(X)[:, 1]
+            
+            # Keep BUY only if meta-model probability of success is >= 50%
+            filtered_buy_mask = buy_mask & (meta_probs >= 0.5)
+            signals[filtered_buy_mask] = 1
+        else:
+            signals[buy_mask] = 1
+            
+        # Sell signals remain as simple threshold breaches (risk mitigation exits)
         sell_mask = probs <= (1.0 - self.confidence_threshold)
         signals[sell_mask] = -1
         
@@ -188,9 +292,10 @@ class EnsembleTradingModel:
             random_state=42,
             n_jobs=-1
         )
+        from sklearn.calibration import CalibratedClassifierCV
         try:
             rf_search.fit(X_clean, y_clean)
-            self.rf_model = rf_search.best_estimator_
+            self.rf_model = CalibratedClassifierCV(estimator=rf_search.best_estimator_, method='sigmoid', cv=3)
             logger.info(f"RF Auto-Tuning Complete. Best Params: {rf_search.best_params_}")
         except Exception as e:
             logger.error(f"Random Forest tuning failed: {e}. Keeping default RF model.")
@@ -213,7 +318,7 @@ class EnsembleTradingModel:
         )
         try:
             gb_search.fit(X_clean, y_clean)
-            self.gb_model = gb_search.best_estimator_
+            self.gb_model = CalibratedClassifierCV(estimator=gb_search.best_estimator_, method='sigmoid', cv=3)
             logger.info(f"GBDT Auto-Tuning Complete. Best Params: {gb_search.best_params_}")
         except Exception as e:
             logger.error(f"Gradient Boosting tuning failed: {e}. Keeping default GBDT model.")
@@ -238,7 +343,7 @@ class EnsembleTradingModel:
                     n_jobs=-1
                 )
                 cb_search.fit(X_clean, y_clean)
-                self.cb_model = cb_search.best_estimator_
+                self.cb_model = CalibratedClassifierCV(estimator=cb_search.best_estimator_, method='sigmoid', cv=3)
                 logger.info(f"CatBoost Auto-Tuning Complete. Best Params: {cb_search.best_params_}")
             except Exception as e:
                 logger.error(f"CatBoost tuning failed: {e}. Keeping default CatBoost model.")

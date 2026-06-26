@@ -34,6 +34,31 @@ def fetch_ticker_data(ticker):
     logger.info(f"Downloaded {len(df)} rows for {ticker}.")
     return df
 
+@network_retry(retries=3, backoff_factor=2.0)
+def fetch_ticker_4h_data(ticker):
+    """Downloads recent 4-hour asset data using yfinance with retry resiliency."""
+    from datetime import datetime, timedelta
+    start_date = (datetime.now() - timedelta(days=729)).strftime("%Y-%m-%d")
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    logger.info(f"Downloading 4h historical data for {ticker} from {start_date}...")
+    df = yf.download(
+        tickers=ticker,
+        start=start_date,
+        end=end_date,
+        interval="4h",
+        progress=False
+    )
+    if df.empty:
+        logger.warning(f"No 4h data returned for {ticker} from Yahoo Finance.")
+        return pd.DataFrame()
+        
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+        
+    df = df[df['Volume'] > 0].copy()
+    logger.info(f"Downloaded {len(df)} 4h rows for {ticker}.")
+    return df
+
 # Import yfinance inside main wrapper to ensure decorator works
 import yfinance as yf
 
@@ -68,6 +93,15 @@ def main():
                 df['Sentiment_Score'] = 50.0
                 df['Sentiment_MA7'] = 50.0
             
+            # Download recent 4h historical data for multi-timeframe trend coherence
+            try:
+                df_4h = fetch_ticker_4h_data(ticker)
+                from features import align_multi_timeframe_indicators
+                df = align_multi_timeframe_indicators(df, df_4h)
+            except Exception as e:
+                logger.error(f"Failed to load 4h data for {ticker}: {e}. Defaulting 4h filter to pass.")
+                df['4h_Bullish'] = 1.0
+            
             # Feature calculation & Labeling
             df_copy = df.copy()
             feature_cols = build_features(df_copy)
@@ -85,12 +119,12 @@ def main():
             regime_filter = MarketRegimeFilter()
             regime_scale = regime_filter.compute_regime_sizing(df_copy)
             
-            # Combine with long-term trend filter (SMA_200)
+            # Combine with long-term trend filter (SMA_200) and multi-timeframe filter (4h_Bullish)
             if config.USE_TREND_FILTER:
                 trend_bullish = df_copy['Close'] > df_copy['SMA_200']
-                df_copy['Entry_Allowed'] = regime_scale * trend_bullish.astype(float)
+                df_copy['Entry_Allowed'] = regime_scale * trend_bullish.astype(float) * df_copy['4h_Bullish']
             else:
-                df_copy['Entry_Allowed'] = regime_scale
+                df_copy['Entry_Allowed'] = regime_scale * df_copy['4h_Bullish']
                 
             # Remove NaNs
             df_clean = df_copy.dropna(subset=feature_cols + ['SMA_200']).copy()
@@ -181,8 +215,12 @@ def main():
         X_train_pooled = pd.concat(train_features, axis=0)
         y_train_pooled = pd.concat(train_targets, axis=0)
         
-        # Fit Ensemble Model on all historical data up to yesterday
-        ensemble.fit(X_train_pooled, y_train_pooled)
+        # Retrain primary ensemble and secondary meta-labeler weekly to optimize simulation speed
+        if i % 7 == 0 or i == 0 or i == len(test_dates) - 1:
+            # Fit Ensemble Model on all historical data up to yesterday
+            ensemble.fit(X_train_pooled, y_train_pooled)
+            # Train De Prado's meta-labeler on out-of-fold trade predictions
+            ensemble.fit_meta_model(X_train_pooled, y_train_pooled)
         
         # Generate predictions for today (date 't')
         for ticker in test_dfs_dict.keys():

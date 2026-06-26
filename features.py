@@ -211,3 +211,37 @@ def create_labels(df, horizon=5, min_return=0.005):
     df['Target'] = target
     return target
 
+def align_multi_timeframe_indicators(df_daily, df_4h):
+    """
+    Computes a 4-hour trend filter (EMA 50) on 4-hour candles,
+    resamples it daily (taking the last candle state of each day),
+    and left-joins it back to the daily dataframe.
+    Missing entries (e.g. before 730 days ago) default to 1.0 (bullish/pass).
+    """
+    if df_4h is None or df_4h.empty:
+        df_daily['4h_Bullish'] = 1.0
+        return df_daily
+
+    df_4h_copy = df_4h.copy()
+    
+    # Handle multi-index columns if present
+    if isinstance(df_4h_copy.columns, pd.MultiIndex):
+        df_4h_copy.columns = df_4h_copy.columns.get_level_values(0)
+        
+    df_4h_copy['EMA_50'] = df_4h_copy['Close'].ewm(span=50, adjust=False).mean()
+    df_4h_copy['4h_Bullish'] = (df_4h_copy['Close'] > df_4h_copy['EMA_50']).astype(float)
+    
+    # Strip timezone if present to prevent join issues
+    df_4h_copy.index = df_4h_copy.index.tz_localize(None)
+    df_4h_daily = df_4h_copy['4h_Bullish'].resample('D').last().ffill()
+    
+    # Ensure daily df index is timezone-naive as well
+    df_daily_naive = df_daily.copy()
+    df_daily_naive.index = df_daily_naive.index.tz_localize(None)
+    
+    df_daily_naive = df_daily_naive.join(df_4h_daily, how='left')
+    df_daily_naive['4h_Bullish'] = df_daily_naive['4h_Bullish'].fillna(1.0)
+    
+    return df_daily_naive
+
+
