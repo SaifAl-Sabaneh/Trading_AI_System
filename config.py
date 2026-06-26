@@ -27,7 +27,7 @@ SMA_TREND_WINDOW = 200         # Window for long-term trend filter
 FORECAST_HORIZON = 10          # Prediction lookforward horizon (e.g., 10 days for Triple Barrier)
 TRAIN_TEST_SPLIT_RATIO = 0.7   # Proportion of data used for initial split
 ML_MODEL_TYPE = "ensemble"     # Stacking ensemble: RF + GB + CatBoost + LogisticRegression
-CONFIDENCE_THRESHOLD = 0.85    # Strict confidence threshold for signals
+CONFIDENCE_THRESHOLD = 0.35    # Strict confidence threshold for signals (calibrated to 0.35 due to 21.6% prior)
 
 # ----------------- ADVANCED ML UPGRADES -----------------
 USE_SENTIMENT = True              # Use Crypto Fear & Greed Index daily sentiment features

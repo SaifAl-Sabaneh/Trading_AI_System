@@ -225,3 +225,72 @@ def send_push_notification(message):
         except Exception as e:
             logger.warning(f"Failed to send Telegram notification: {e}")
 
+def push_to_github():
+    """
+    Commits and pushes generated dashboard files back to GitHub.
+    Uses GITHUB_PAT environment variable for authentication.
+    """
+    import subprocess
+    from datetime import datetime
+    
+    pat = os.getenv("GITHUB_PAT", "")
+    if not pat:
+        logger.info("GITHUB_PAT environment variable not configured. Skipping dashboard auto-push.")
+        return False
+        
+    logger.info("Initializing GitHub auto-push pipeline for dashboard update...")
+    
+    try:
+        # 1. Configure git user info if not configured
+        subprocess.run(["git", "config", "user.name", "Crypto Trading Bot"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "bot@cryptotrading.com"], check=True, capture_output=True)
+        
+        # 2. Set remote origin URL with token
+        repo_url = f"https://{pat}@github.com/SaifAl-Sabaneh/crypto-trading-bot.git"
+        subprocess.run(["git", "remote", "set-url", "origin", repo_url], check=True, capture_output=True)
+        
+        # 3. Add generated output files
+        files_to_add = ["portfolio_state.js", "portfolio_performance.png", "report.html", "executed_trades.csv"]
+        # Only add files that exist
+        existing_files = [f for f in files_to_add if os.path.exists(f)]
+        if not existing_files:
+            logger.warning("No dashboard files found to push.")
+            return False
+            
+        for f in existing_files:
+            subprocess.run(["git", "add", f], check=True, capture_output=True)
+            
+        # 4. Commit changes
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        commit_msg = f"Auto-update portfolio state: {timestamp}"
+        
+        # Check if there are any staged changes before committing
+        status_check = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        if not status_check.stdout.strip():
+            logger.info("No dashboard changes detected. Skipping git commit.")
+            return True
+            
+        subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
+        
+        # 5. Push to origin main
+        push_res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True)
+        if push_res.returncode != 0:
+            err_msg = push_res.stderr.replace(pat, "***MASKED_PAT***")
+            logger.warning(f"Git push failed: {err_msg}")
+            return False
+            
+        logger.info("Successfully pushed updated dashboard files to GitHub.")
+        return True
+        
+    except Exception as e:
+        err_msg = str(e).replace(pat, "***MASKED_PAT***")
+        logger.error(f"Failed to execute GitHub auto-push pipeline: {err_msg}")
+        return False
+    finally:
+        # Restore original remote URL without token to avoid token leaks in .git/config
+        try:
+            subprocess.run(["git", "remote", "set-url", "origin", "https://github.com/SaifAl-Sabaneh/crypto-trading-bot.git"], capture_output=True)
+        except Exception:
+            pass
+
+

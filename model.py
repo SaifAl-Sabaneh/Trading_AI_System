@@ -262,7 +262,8 @@ class EnsembleTradingModel:
             signals[buy_mask] = 1
             
         # Sell signals remain as simple threshold breaches (risk mitigation exits)
-        sell_mask = probs <= (1.0 - self.confidence_threshold)
+        sell_threshold = min(1.0 - self.confidence_threshold, 0.20)
+        sell_mask = probs <= sell_threshold
         signals[sell_mask] = -1
         
         return signals, probs

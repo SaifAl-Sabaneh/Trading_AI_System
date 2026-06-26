@@ -497,8 +497,11 @@ def main():
         f"• **Win Rate**: {metrics['win_rate']:.2%}\n"
         f"• **Circuit Breaker Tripped**: {backtester.circuit_breaker_tripped}"
     )
-    from security import send_push_notification
+    from security import send_push_notification, push_to_github
     send_push_notification(summary_msg)
+    
+    # 10. Auto-push updated dashboard files to GitHub (persists Render static dashboards)
+    push_to_github()
     
     logger.info("Bot execution completed successfully.")
 
