@@ -40,7 +40,7 @@ FEAR_GREED_FEAR_FLOOR = 15        # Fear floor (only blocks shorts at absolute p
 
 # ----------------- LAYER 3: EXECUTION & POSITION SIZING -----------------
 ATR_WINDOW = 14                # Window for ATR
-TP_ATR_MULT = 2.5              # Take-Profit multiplier (optimized)
+TP_ATR_MULT = 3.5              # Take-Profit multiplier (optimized to 3.5)
 SL_ATR_MULT_LONG = 1.5         # Stop-Loss multiplier for long positions (optimized to avoid premature stop-outs)
 SL_ATR_MULT_SHORT = 1.8        # Stop-Loss multiplier for short positions (optimized to absorb squeeze noise)
 ENABLE_BREAKEVEN = True        # Move SL to Entry once price moves 0.8 * ATR in our favor (tightened)

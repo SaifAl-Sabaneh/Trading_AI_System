@@ -261,8 +261,9 @@ class PortfolioBacktester:
                 
                 # Position sizing
                 allocation_usd = cash_at_start * self.max_alloc * scale
+                allocation_usd = min(shared_cash, allocation_usd)
                 
-                if shared_cash >= allocation_usd and allocation_usd > 0:
+                if allocation_usd > 0:
                     tp_factor = 0.7 + 0.5 * scale  # maps scale=0 -> 0.7, scale=1 -> 1.2
                     sl_factor = 0.8 + 0.2 * scale  # maps scale=0 -> 0.8, scale=1 -> 1.0
                     
