@@ -13,9 +13,12 @@ class EnsembleTradingModel:
     Combines predictions from Random Forest, Gradient Boosting, 
     Logistic Regression, and CatBoost (if available) to produce high-precision probability estimations.
     """
-    def __init__(self, model_type=config.ML_MODEL_TYPE, confidence_threshold=config.CONFIDENCE_THRESHOLD):
+    def __init__(self, model_type=config.ML_MODEL_TYPE, 
+                 conf_thresh_long=config.CONFIDENCE_THRESHOLD_LONG,
+                 conf_thresh_short=config.CONFIDENCE_THRESHOLD_SHORT):
         self.model_type = model_type
-        self.confidence_threshold = confidence_threshold
+        self.conf_thresh_long = conf_thresh_long
+        self.conf_thresh_short = conf_thresh_short
         
         # 1. Random Forest (Tree classifier, bagging)
         self.rf_model = RandomForestClassifier(
@@ -208,7 +211,7 @@ class EnsembleTradingModel:
             oof_probs[val_idx] = probs
             
         # Identify where primary model generates BUY signals
-        buy_signal_mask = oof_probs >= self.confidence_threshold
+        buy_signal_mask = oof_probs >= self.conf_thresh_long
         
         X_meta = X_clean_pruned[buy_signal_mask]
         y_meta = y_clean[buy_signal_mask]
@@ -248,7 +251,7 @@ class EnsembleTradingModel:
         signals = np.zeros(len(X))
         
         # 1. Primary Model checks
-        buy_mask = probs >= self.confidence_threshold
+        buy_mask = probs >= self.conf_thresh_long
         
         # 2. Filter primary signals with De Prado's Meta-model
         if self.meta_model_trained and np.any(buy_mask):
@@ -261,9 +264,8 @@ class EnsembleTradingModel:
         else:
             signals[buy_mask] = 1
             
-        # Sell signals remain as simple threshold breaches (risk mitigation exits)
-        sell_threshold = min(1.0 - self.confidence_threshold, 0.20)
-        sell_mask = probs <= sell_threshold
+        # Sell/Short signals threshold
+        sell_mask = probs <= self.conf_thresh_short
         signals[sell_mask] = -1
         
         return signals, probs
@@ -294,8 +296,8 @@ class EnsembleTradingModel:
         preds = (probs >= 0.5).astype(int)
         acc = accuracy_score(y_clean, preds)
         
-        high_conf_buy = probs >= self.confidence_threshold
-        high_conf_sell = probs <= (1.0 - self.confidence_threshold)
+        high_conf_buy = probs >= self.conf_thresh_long
+        high_conf_sell = probs <= self.conf_thresh_short
         
         total_buy = np.sum(high_conf_buy)
         total_sell = np.sum(high_conf_sell)
@@ -305,15 +307,15 @@ class EnsembleTradingModel:
         
         if total_buy > 0:
             buy_prec = precision_score(y_clean[high_conf_buy], np.ones(total_buy), zero_division=0)
-            logger.info(f"Filtered BUY Precision (P >= {self.confidence_threshold:.0%}): {buy_prec:.2%} (Total Signals: {total_buy})")
+            logger.info(f"Filtered BUY Precision (P >= {self.conf_thresh_long:.0%}): {buy_prec:.2%} (Total Signals: {total_buy})")
         else:
-            logger.info(f"Filtered BUY Precision (P >= {self.confidence_threshold:.0%}): N/A (0 signals)")
+            logger.info(f"Filtered BUY Precision (P >= {self.conf_thresh_long:.0%}): N/A (0 signals)")
             
         if total_sell > 0:
             sell_prec = accuracy_score(y_clean[high_conf_sell], np.zeros(total_sell))
-            logger.info(f"Filtered SELL Precision (P <= {1-self.confidence_threshold:.0%}): {sell_prec:.2%} (Total Signals: {total_sell})")
+            logger.info(f"Filtered SELL Precision (P <= {self.conf_thresh_short:.0%}): {sell_prec:.2%} (Total Signals: {total_sell})")
         else:
-            logger.info(f"Filtered SELL Precision (P <= {1-self.confidence_threshold:.0%}): N/A (0 signals)")
+            logger.info(f"Filtered SELL Precision (P <= {self.conf_thresh_short:.0%}): N/A (0 signals)")
         logger.info("=================================")
         
         return acc

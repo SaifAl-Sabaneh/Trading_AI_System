@@ -28,13 +28,14 @@ EMA_TREND_WINDOW = 50          # Window for medium-term trend confirmation
 FORECAST_HORIZON = 10          # Prediction lookforward horizon (e.g., 10 days for Triple Barrier)
 TRAIN_TEST_SPLIT_RATIO = 0.7   # Proportion of data used for initial split
 ML_MODEL_TYPE = "ensemble"     # Stacking ensemble: RF + GB + CatBoost + LogisticRegression
-CONFIDENCE_THRESHOLD = 0.35    # Strict confidence threshold for signals (calibrated to 0.35 due to 21.6% prior)
+CONFIDENCE_THRESHOLD_LONG = 0.37  # Strict confidence threshold for buying/longing (calibrated to 0.37 to avoid bad early longs)
+CONFIDENCE_THRESHOLD_SHORT = 0.30 # Calibrated threshold for shorting (triggered when prob is <= 0.30)
 
 # ----------------- ADVANCED ML UPGRADES -----------------
 USE_SENTIMENT = True              # Use Crypto Fear & Greed Index daily sentiment features
 RUN_HYPERPARAMETER_TUNING = True  # Auto-optimize model parameters using RandomizedSearchCV
-FEAR_GREED_GREED_CAP = 85         # Extreme greed cap (blocks long entries)
-FEAR_GREED_FEAR_FLOOR = 15        # Extreme fear floor (blocks short entries)
+FEAR_GREED_GREED_CAP = 65         # Greed cap (blocks long entries in moderately frothy markets)
+FEAR_GREED_FEAR_FLOOR = 15        # Fear floor (only blocks shorts at absolute panic bottoms below 15)
 
 
 # ----------------- LAYER 3: EXECUTION & POSITION SIZING -----------------
@@ -48,7 +49,7 @@ MAX_ALLOCATION_PER_TRADE = 0.25# Max portfolio allocation per trade (25% for div
 
 # ----------------- REAL-WORLD RISK PROTECTIONS -----------------
 SLIPPAGE_PENALTY_PCT = 0.0015  # 0.15% slippage/fee penalty applied to every trade exit
-WEEKLY_DRAWDOWN_LIMIT = 0.05   # 5% weekly drawdown limit. Triggering this halts all trading.
+WEEKLY_DRAWDOWN_LIMIT = 0.10   # 10% weekly drawdown limit (adjusted to 10% to prevent false halts during normal high-volatility regimes)
 
 # ----------------- ALERTS & WEBHOOK CHANNELS -----------------
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")

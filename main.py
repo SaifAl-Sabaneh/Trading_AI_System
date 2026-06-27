@@ -174,7 +174,11 @@ def main():
     logger.info(f"Starting daily walk-forward retraining simulation...")
     logger.info(f"Total days to simulate: {len(test_dates)} dates across {len(processed_dfs)} assets.")
     
-    ensemble = EnsembleTradingModel(model_type=config.ML_MODEL_TYPE, confidence_threshold=config.CONFIDENCE_THRESHOLD)
+    ensemble = EnsembleTradingModel(
+        model_type=config.ML_MODEL_TYPE, 
+        conf_thresh_long=config.CONFIDENCE_THRESHOLD_LONG, 
+        conf_thresh_short=config.CONFIDENCE_THRESHOLD_SHORT
+    )
     
     # 2.5 Tune Hyperparameters on initial pooled training set if enabled
     if config.RUN_HYPERPARAMETER_TUNING and len(test_dates) > 0:
@@ -252,7 +256,9 @@ def main():
                     else:
                         trend_ok = (mt_bullish_val == 1.0)
                     sent_ok = df_test.loc[t, 'Long_Sentiment']
-                    allowed = regime_val if (trend_ok and sent_ok) else 0.0
+                    # Bullish momentum confirmation: RSI > 48 and MACD Histogram is positive
+                    mom_ok = (df_test.loc[t, 'RSI'] > 48.0) and (df_test.loc[t, 'MACD_Hist'] > 0.0)
+                    allowed = regime_val if (trend_ok and sent_ok and mom_ok) else 0.0
                 elif sig[0] == -1:
                     # Short entry filters
                     if config.USE_TREND_FILTER:
@@ -260,7 +266,9 @@ def main():
                     else:
                         trend_ok = (mt_bullish_val == 0.0)
                     sent_ok = df_test.loc[t, 'Short_Sentiment']
-                    allowed = 1.0 if (trend_ok and sent_ok) else 0.0
+                    # Bearish momentum confirmation: RSI < 52 and MACD Histogram is negative
+                    mom_ok = (df_test.loc[t, 'RSI'] < 52.0) and (df_test.loc[t, 'MACD_Hist'] < 0.0)
+                    allowed = 1.0 if (trend_ok and sent_ok and mom_ok) else 0.0
                 else:
                     allowed = 0.0
                     
