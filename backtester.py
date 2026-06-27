@@ -206,11 +206,11 @@ class PortfolioBacktester:
                     # Trailing & Breakeven updates
                     if self.enable_breakeven and not pos['breakeven']:
                         if is_long:
-                            if high_val >= (pos['entry_price'] + pos['entry_atr']):
+                            if high_val >= (pos['entry_price'] + 0.8 * pos['entry_atr']):
                                 positions[ticker]['sl'] = pos['entry_price']
                                 positions[ticker]['breakeven'] = True
                         else:
-                            if low_val <= (pos['entry_price'] - pos['entry_atr']):
+                            if low_val <= (pos['entry_price'] - 0.8 * pos['entry_atr']):
                                 positions[ticker]['sl'] = pos['entry_price']
                                 positions[ticker]['breakeven'] = True
             

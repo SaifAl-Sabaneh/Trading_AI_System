@@ -10,7 +10,7 @@ SECRET_KEY = os.getenv("EXCHANGE_SECRET_KEY", "")
 IS_SANDBOX = True              # Safe mode: True for mock paper-trading, False for live money
 
 # ----------------- DATA SETTINGS -----------------
-TICKERS = ["COIN", "BTC-USD", "ETH-USD"] # Focus on highly liquid crypto/crypto-related assets
+TICKERS = ["COIN", "BTC-USD", "ETH-USD", "GLD", "SLV", "TSLA", "AAPL", "MSFT", "NVDA", "SPY", "QQQ"] # Expanded multi-sector asset universe
 START_DATE = "2023-01-01"      # Historical data start date
 END_DATE = "2026-06-25"        # Historical data end date
 INTERVAL = "1d"                # Timeframe interval (e.g., '1d')
@@ -40,13 +40,13 @@ FEAR_GREED_FEAR_FLOOR = 15        # Fear floor (only blocks shorts at absolute p
 
 # ----------------- LAYER 3: EXECUTION & POSITION SIZING -----------------
 ATR_WINDOW = 14                # Window for ATR
-TP_ATR_MULT = 2.5              # Take-Profit multiplier
-SL_ATR_MULT_LONG = 1.0         # Stop-Loss multiplier for long positions
-SL_ATR_MULT_SHORT = 1.8        # Stop-Loss multiplier for short positions (widened to absorb squeeze noise)
-ENABLE_BREAKEVEN = True        # Move SL to Entry once price moves 1.0 * ATR in our favor
+TP_ATR_MULT = 2.5              # Take-Profit multiplier (optimized)
+SL_ATR_MULT_LONG = 1.5         # Stop-Loss multiplier for long positions (optimized to avoid premature stop-outs)
+SL_ATR_MULT_SHORT = 1.8        # Stop-Loss multiplier for short positions (optimized to absorb squeeze noise)
+ENABLE_BREAKEVEN = True        # Move SL to Entry once price moves 0.8 * ATR in our favor (tightened)
 
 INITIAL_CAPITAL = 10000.0      # Starting backtest capital in USD
-MAX_ALLOCATION_PER_TRADE = 0.40# Max portfolio allocation per trade (40% for optimal capital scaling)
+MAX_ALLOCATION_PER_TRADE = 0.35# Max portfolio allocation per trade (optimized to 35% for risk-adjusted scaling)
 
 # ----------------- REAL-WORLD RISK PROTECTIONS -----------------
 SLIPPAGE_PENALTY_PCT = 0.0015  # 0.15% slippage/fee penalty applied to every trade exit
