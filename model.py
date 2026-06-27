@@ -4,6 +4,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
+import joblib
 import config
 from security import logger
 
@@ -420,4 +421,34 @@ class EnsembleTradingModel:
                 logger.info(f"CatBoost Auto-Tuning Complete. Best Params: {cb_search.best_params_}")
             except Exception as e:
                 logger.error(f"CatBoost tuning failed: {e}. Keeping default CatBoost model.")
+
+    def save(self, filepath):
+        """Serializes the ensemble model components to a file."""
+        state = {
+            'rf_model': self.rf_model,
+            'gb_model': self.gb_model,
+            'lr_model': self.lr_model,
+            'cb_model': self.cb_model if self.cb_available else None,
+            'meta_model': self.meta_model if self.meta_model_trained else None,
+            'active_features': self.active_features,
+            'active_features_pruned': self.active_features_pruned,
+            'cb_available': self.cb_available,
+            'meta_model_trained': self.meta_model_trained
+        }
+        joblib.dump(state, filepath)
+        logger.info(f"Successfully saved ensemble model to {filepath}")
+        
+    def load(self, filepath):
+        """Deserializes and restores ensemble model components from a file."""
+        state = joblib.load(filepath)
+        self.rf_model = state['rf_model']
+        self.gb_model = state['gb_model']
+        self.lr_model = state['lr_model']
+        self.cb_model = state['cb_model']
+        self.cb_available = state['cb_available']
+        self.meta_model = state['meta_model']
+        self.meta_model_trained = state['meta_model_trained']
+        self.active_features = state['active_features']
+        self.active_features_pruned = state['active_features_pruned']
+        logger.info(f"Successfully loaded ensemble model from {filepath}")
 

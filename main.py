@@ -557,6 +557,14 @@ def main():
     # 10. Auto-push updated dashboard files to GitHub (persists Render static dashboards)
     push_to_github()
     
+    # 11. Save trained sector ensembles to disk
+    try:
+        crypto_ensemble.save('crypto_ensemble.joblib')
+        equity_ensemble.save('equity_ensemble.joblib')
+        logger.info("Saved trained sector ensembles to disk (crypto_ensemble.joblib, equity_ensemble.joblib).")
+    except Exception as e:
+        logger.error(f"Failed to save models to disk: {e}")
+        
     logger.info("Bot execution completed successfully.")
 
 if __name__ == "__main__":
