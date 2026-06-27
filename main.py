@@ -259,7 +259,7 @@ def main():
                     # Bullish momentum confirmation: RSI > 48 and MACD Histogram is positive
                     mom_ok = (df_test.loc[t, 'RSI'] > 48.0) and (df_test.loc[t, 'MACD_Hist'] > 0.0)
                     allowed = regime_val if (trend_ok and sent_ok and mom_ok) else 0.0
-                elif sig[0] == -1:
+                elif sig[0] == -1 and (ticker in config.SHORTABLE_TICKERS):
                     # Short entry filters
                     if config.USE_TREND_FILTER:
                         trend_ok = df_test.loc[t, 'Trend_Bearish'] and (mt_bullish_val == 0.0)

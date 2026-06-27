@@ -11,6 +11,7 @@ IS_SANDBOX = True              # Safe mode: True for mock paper-trading, False f
 
 # ----------------- DATA SETTINGS -----------------
 TICKERS = ["COIN", "BTC-USD", "ETH-USD", "GLD", "SLV", "TSLA", "AAPL", "MSFT", "NVDA", "SPY", "QQQ"] # Expanded multi-sector asset universe
+SHORTABLE_TICKERS = ["BTC-USD", "ETH-USD", "COIN", "TSLA"] # Tickers allowed for short-selling (high volatility growth/crypto)
 START_DATE = "2023-01-01"      # Historical data start date
 END_DATE = "2026-06-25"        # Historical data end date
 INTERVAL = "1d"                # Timeframe interval (e.g., '1d')
@@ -40,7 +41,7 @@ FEAR_GREED_FEAR_FLOOR = 15        # Fear floor (only blocks shorts at absolute p
 
 # ----------------- LAYER 3: EXECUTION & POSITION SIZING -----------------
 ATR_WINDOW = 14                # Window for ATR
-TP_ATR_MULT = 3.5              # Take-Profit multiplier (optimized to 3.5)
+TP_ATR_MULT = 2.5              # Take-Profit multiplier (restored to 2.5 for balanced label distribution)
 SL_ATR_MULT_LONG = 1.5         # Stop-Loss multiplier for long positions (optimized to avoid premature stop-outs)
 SL_ATR_MULT_SHORT = 1.8        # Stop-Loss multiplier for short positions (optimized to absorb squeeze noise)
 ENABLE_BREAKEVEN = True        # Move SL to Entry once price moves 0.8 * ATR in our favor (tightened)
