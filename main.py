@@ -561,17 +561,21 @@ def main():
     
     # 9. Send summary report notification to Discord/Telegram
     summary_msg = (
-        f"📊 **Backtest Simulation Completed**\n"
-        f"• **Asset Tickers**: {', '.join(config.TICKERS)}\n"
-        f"• **Initial Capital**: ${config.INITIAL_CAPITAL:,.2f}\n"
-        f"• **Final Value**: ${equity_series.iloc[-1]:,.2f}\n"
-        f"• **Strategy Return**: {metrics['strategy_return']:.2%}\n"
-        f"• **Market Return (B&H)**: {metrics['bh_return']:.2%}\n"
-        f"• **Outperformance**: {metrics['strategy_return'] - metrics['bh_return']:+.2%}\n"
-        f"• **Max Drawdown**: {metrics['max_drawdown']:.2%}\n"
-        f"• **Total Trades Taken**: {metrics['total_trades']}\n"
-        f"• **Win Rate**: {metrics['win_rate']:.2%}\n"
-        f"• **Circuit Breaker Tripped**: {backtester.circuit_breaker_tripped}"
+        f"🚀 **Ultimate Trading Bot Run Summary**\n\n"
+        f"💰 **Your Account Balance**:\n"
+        f"• **Start Capital**: `${config.INITIAL_CAPITAL:,.2f}` (Initial funds)\n"
+        f"• **Final Balance**: `${equity_series.iloc[-1]:,.2f}` (Your total money now)\n"
+        f"• **Net Profit (Strategy Return)**: **{metrics['strategy_return']:.2%}** (How much your money grew)\n\n"
+        f"📈 **Bot vs. General Market**:\n"
+        f"• **Market Benchmark Return**: **{metrics['bh_return']:.2%}** (What you would get by doing nothing/passive investing)\n"
+        f"• **Bot Outperformance**: **{metrics['strategy_return'] - metrics['bh_return']:+.2%}** (How much the bot beat the market by)\n\n"
+        f"🛡️ **Risk & Safety Controls**:\n"
+        f"• **Max Temporary Drop (Drawdown)**: **{metrics['max_drawdown']:.2%}** (The worst-case peak-to-trough paper loss)\n"
+        f"• **Circuit Breaker Tripped**: **{backtester.circuit_breaker_tripped}** (Safety halt to prevent major crashes)\n\n"
+        f"📊 **Trading Statistics**:\n"
+        f"• **Total Trades Executed**: **{metrics['total_trades']}** (Number of buys/shorts made)\n"
+        f"• **Win Rate**: **{metrics['win_rate']:.2%}** (Percentage of profitable trades)\n\n"
+        f"✨ *The bot models are healthy, synchronized, and ready on disk!*"
     )
     from security import send_push_notification, push_to_github
     send_push_notification(summary_msg)

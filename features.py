@@ -350,11 +350,15 @@ def align_multi_timeframe_indicators(df_daily, df_4h):
     
     return df_daily_naive
 
-# Initialize VADER sentiment analyzer
+# Initialize VADER sentiment analyzer with fail-proof safety
 try:
-    nltk.data.find('sentiment/vader_lexicon.zip')
-except LookupError:
-    nltk.download('vader_lexicon', quiet=True)
+    try:
+        nltk.data.find('sentiment/vader_lexicon.zip')
+    except LookupError:
+        nltk.download('vader_lexicon', quiet=True)
+except Exception as e:
+    from security import logger
+    logger.warning(f"NLTK VADER lexicon download failed or not found: {e}. Sentiment analysis fallback active.")
 
 _vader_analyzer = None
 
