@@ -10,8 +10,8 @@ SECRET_KEY = os.getenv("EXCHANGE_SECRET_KEY", "")
 IS_SANDBOX = True              # Safe mode: True for mock paper-trading, False for live money
 
 # ----------------- DATA SETTINGS -----------------
-TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "GLD", "SLV", "TSLA", "AAPL", "MSFT", "NVDA", "AMZN", "META", "SPY", "QQQ"] # Expanded multi-sector asset universe
-SHORTABLE_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "COIN", "TSLA"] # Tickers allowed for short-selling (high volatility growth/crypto)
+TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "TSLA", "NVDA", "AMZN", "META"] # High-momentum growth and crypto asset universe
+SHORTABLE_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "COIN", "TSLA", "NVDA", "AMZN", "META"] # Tickers allowed for short-selling
 CRYPTO_TICKERS    = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "COIN"]         # Crypto assets eligible for on-chain features
 START_DATE = "2023-01-01"      # Historical data start date
 END_DATE = "2026-06-25"        # Historical data end date
