@@ -48,7 +48,8 @@ SL_ATR_MULT_SHORT = 1.0        # Stop-Loss multiplier for short positions (optim
 ENABLE_BREAKEVEN = True        # Move SL to Entry once price moves 0.8 * ATR in our favor (tightened)
 
 INITIAL_CAPITAL = 10000.0      # Starting backtest capital in USD
-MAX_ALLOCATION_PER_TRADE = 0.44# Max portfolio allocation per trade (quality-focused 44% for high win rate and Sharpe)
+MAX_ALLOCATION_PER_TRADE = 0.10# Max portfolio allocation per trade (quality-focused 10% for multi-asset trading)
+LEVERAGE = 10                  # 10x leverage multiplier for isolated futures margin
 
 # ----------------- REAL-WORLD RISK PROTECTIONS -----------------
 SLIPPAGE_PENALTY_PCT = 0.0015  # 0.15% slippage/fee penalty applied to every trade exit
