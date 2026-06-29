@@ -293,4 +293,39 @@ def push_to_github():
         except Exception:
             pass
 
+def calculate_live_accuracy(csv_path='executed_trades.csv'):
+    """
+    Reads the CSV trade log and returns a tuple:
+    (total_trades, win_rate_percentage, profit_factor)
+    """
+    import os
+    import pandas as pd
+    if not os.path.exists(csv_path):
+        return 0, 0.0, 0.0
+    try:
+        df = pd.read_csv(csv_path)
+        if len(df) == 0:
+            return 0, 0.0, 0.0
+        
+        pnl_col = 'PnL_Pct' if 'PnL_Pct' in df.columns else ('pnl_pct' if 'pnl_pct' in df.columns else '')
+        pnl_usd_col = 'PnL_USD' if 'PnL_USD' in df.columns else ('pnl_usd' if 'pnl_usd' in df.columns else '')
+        
+        if not pnl_col:
+            return 0, 0.0, 0.0
+            
+        total_trades = len(df)
+        winning_trades = len(df[df[pnl_col] > 0])
+        win_rate = (winning_trades / total_trades) * 100
+        
+        profit_factor = 0.0
+        if pnl_usd_col and total_trades > 0:
+            g_prof = df[df[pnl_usd_col] > 0][pnl_usd_col].sum()
+            g_loss = abs(df[df[pnl_usd_col] <= 0][pnl_usd_col].sum())
+            profit_factor = g_prof / g_loss if g_loss > 0 else float('inf')
+            
+        return total_trades, win_rate, profit_factor
+    except Exception as e:
+        logger.warning(f"Failed to calculate live accuracy: {e}")
+        return 0, 0.0, 0.0
+
 
