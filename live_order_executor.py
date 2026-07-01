@@ -132,6 +132,16 @@ def execute_live_trading():
         return
     crypto_ensemble.load('crypto_ensemble.joblib')
 
+    # Load RL Agent if enabled
+    rl_agent = None
+    if getattr(config, 'USE_RL_AGENT', False):
+        try:
+            from rl_agent import QLearningAgent
+            rl_agent = QLearningAgent()
+            logger.info("Live Q-Learning RL Agent loaded successfully.")
+        except Exception as e:
+            logger.error(f"Failed to load RL Agent: {e}")
+
     # Load recent trade log to determine state/drawdowns
     csv_path = 'executed_trades.csv'
     trade_history = []
@@ -234,6 +244,9 @@ def execute_live_trading():
                     trade_history.append(new_trade)
                     pd.DataFrame(trade_history).to_csv(csv_path, index=False)
                     
+                    if rl_agent is not None:
+                        rl_agent.update(pnl_pct)
+                    
                     # AI review Commentary
                     ai_opinion = generate_ai_commentary(recent_trades=[new_trade], is_live=True, regime=current_regime)
                     
@@ -258,6 +271,12 @@ def execute_live_trading():
                 is_short_triggered = (sig_val == -1 and prob_val <= config.CONFIDENCE_THRESHOLD_SHORT)
                 
                 if allow_entry and (is_long_triggered or is_short_triggered):
+                    if rl_agent is not None:
+                        confirmed = rl_agent.should_take_action(sig_val, current_regime, prob_val)
+                        if not confirmed:
+                            logger.info(f"RL Agent: VETOED entry signal on {symbol} due to poor Q-value regime profile.")
+                            continue
+                            
                     logger.info(f"Triggering entry for {symbol} ({'LONG' if is_long_triggered else 'SHORT'})...")
                     
                     # Fetch balance and calculate size

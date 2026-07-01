@@ -98,7 +98,7 @@ LSTM_SEQUENCE_LENGTH = 20      # Number of past bars fed into LSTM as context wi
 LSTM_HIDDEN_SIZE = 32          # Number of hidden units in LSTM cell
 
 # RL Agent
-USE_RL_AGENT = False           # Disable RL agent veto layer to allow all precise ensemble signals
+USE_RL_AGENT = True            # Enable RL agent veto layer to protect capital and boost profit margins
 
 
 # ----------------- SYSTEM LOGGING -----------------
