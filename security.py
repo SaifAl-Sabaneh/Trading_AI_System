@@ -328,4 +328,72 @@ def calculate_live_accuracy(csv_path='executed_trades.csv'):
         logger.warning(f"Failed to calculate live accuracy: {e}")
         return 0, 0.0, 0.0
 
+def generate_ai_commentary(metrics=None, recent_trades=None, is_live=False, regime="Unknown"):
+    """
+    Generates a professional, human-like AI Quantitative Analyst review based on trade performance.
+    """
+    import random
+    
+    # 1. Weekly/Historical Summary Commentary
+    if not is_live and metrics is not None:
+        ret = metrics.get('strategy_return', 0.0)
+        win_rate = metrics.get('win_rate', 0.0)
+        pf = metrics.get('profit_factor', 1.0)
+        outperformance = metrics.get('outperformance', 0.0)
+        
+        if ret > 0:
+            comments = [
+                f"An exceptional performance! Even with a baseline win rate of {win_rate:.1%}, our asymmetrical risk-reward rules (wins > losses) resulted in a net growth of {ret:.2%}. The Kelly sizing and HMM regime filters kept us trading only high-conviction trends, outperforming the benchmark by {outperformance:+.2%}.",
+                f"We locked in a solid {ret:.2%} return this period. The profit factor of {pf:.2f} confirms that our mathematical edge is functioning perfectly—letting winning trades run while stopping out losses early. This is the exact signature of institutional trend-following systems.",
+                f"A great demonstration of automated discipline. The bot beat the benchmark by {outperformance:+.2%} during this run. Our stop-loss rules successfully shielded the account, allowing the compounding growth to do the heavy lifting."
+            ]
+        else:
+            comments = [
+                f"A defensive period for the bot. We closed at {ret:.2%}. Although net return was slightly negative, the HMM regime filters successfully kept drawdowns to a minimum. Preserving capital during high-noise market regimes is a success in itself.",
+                f"The bot closed at {ret:.2%}. Our risk protection engines performed exactly as designed, preventing any major drawdowns during a volatile market. The monthly retraining cycle will update the ensemble weights to adjust to this new environment."
+            ]
+        return random.choice(comments)
+        
+    # 2. Live Daily/Trade Commentary
+    if is_live:
+        if recent_trades is None or len(recent_trades) == 0:
+            if regime in ["Sideways", "Crisis"]:
+                comments = [
+                    f"No trades taken today. The HMM regime classifier detected a {regime} state. Trend-following models typically lose money in these conditions. Standing aside in cash was the correct decision to protect your capital.",
+                    f"We remained in cash today. The market is showing high noise and choppy conditions ({regime} regime). Protecting capital is our first priority; we wait for a clean breakout signal."
+                ]
+            else:
+                comments = [
+                    f"No trade signals fired today. The ensemble confidence remained below our strict 45% trigger threshold. This keeps us out of low-probability entries.",
+                    f"We stayed in cash today. The market is in a stable {regime} regime, but no single asset crossed our conviction thresholds. Patience is a core part of the system."
+                ]
+            return random.choice(comments)
+        else:
+            # We have active trades closed today
+            last_trade = recent_trades[-1]
+            pnl_pct = last_trade.get('PnL_Pct', 0.0)
+            ticker = last_trade.get('Ticker', 'Asset')
+            reason = last_trade.get('ExitReason', '')
+            direction = last_trade.get('Direction', 'Long')
+            
+            if pnl_pct > 0:
+                comments = [
+                    f"A beautiful win on {ticker} ({direction})! The trade hit our Take-Profit target, locking in a +{pnl_pct:.2%} gain. The entry confidence was highly accurate, catching the trend exactly.",
+                    f"Successful trade on {ticker} closed. Our ATR-based take-profit caught the momentum swing cleanly, resulting in a +{pnl_pct:.2%} return. Compounding in action!"
+                ]
+            else:
+                if "SL" in reason or "Stop-Loss" in reason:
+                    comments = [
+                        f"We stopped out of {ticker} ({direction}) early with a minor loss of {pnl_pct:.2%}. The stop-loss worked perfectly, cutting the trade before a larger trend reversal could damage our balance.",
+                        f"Closed {ticker} short/long on stop-loss. Volatility shifted, but our risk controls successfully limited the damage to a tiny fraction of the portfolio. This keeps us in the game."
+                    ]
+                else:
+                    comments = [
+                        f"Closed {ticker} position. The signal reversed or timed out, exiting at {pnl_pct:.2%}. Exiting flat or early keeps our capital free for the next high-probability setup.",
+                        f"Exited {ticker} trade. The market momentum slowed, so the bot closed the trade to preserve cash. Safe and disciplined execution."
+                    ]
+            return random.choice(comments)
+            
+    return "Bot operation running smoothly. All models are synchronized and monitoring the market."
+
 

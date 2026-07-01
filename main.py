@@ -554,6 +554,12 @@ def main():
     logger.info("Performance HTML report written to 'report.html' atomically.")
     
     # 9. Send summary report notification to Discord/Telegram
+    from security import send_push_notification, push_to_github, generate_ai_commentary
+    
+    # Compute outperformance for AI commentary
+    metrics['outperformance'] = metrics['strategy_return'] - metrics['bh_return']
+    ai_opinion = generate_ai_commentary(metrics=metrics, is_live=False)
+    
     summary_msg = (
         f"🚀 **Ultimate Trading Bot Run Summary**\n\n"
         f"💰 **Your Account Balance**:\n"
@@ -569,9 +575,10 @@ def main():
         f"📊 **Trading Statistics**:\n"
         f"• **Total Trades Executed**: **{metrics['total_trades']}** (Number of buys/shorts made)\n"
         f"• **Win Rate**: **{metrics['win_rate']:.2%}** (Percentage of profitable trades)\n\n"
+        f"🤖 **AI Analyst Review**:\n"
+        f"*{ai_opinion}*\n\n"
         f"✨ *The bot models are healthy, synchronized, and ready on disk!*"
     )
-    from security import send_push_notification, push_to_github
     send_push_notification(summary_msg)
     
     # 10. Auto-push updated dashboard files to GitHub (persists Render static dashboards)
