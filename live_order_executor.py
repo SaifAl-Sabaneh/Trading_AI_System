@@ -46,31 +46,26 @@ SYMBOL_MAP = {
 
 def get_eu_proxy():
     """
-    Fetches a list of free European HTTP proxies from Geonode API,
+    Fetches a list of free European HTTP proxies from ProxyScrape API,
     and returns the first one that successfully pings api.binance.com.
     """
     import requests
-    url = "https://proxylist.geonode.com/api/proxy-list?limit=20&page=1&sort_by=lastChecked&sort_type=desc&protocols=http,https&country=DE,FR,NL,GB,IT,ES"
+    url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=DE,FR,GB,NL,ES,IT&ssl=all&anonymity=all"
     try:
         resp = requests.get(url, timeout=10)
         if resp.status_code == 200:
-            data = resp.json().get('data', [])
-            logger.info(f"Fetched {len(data)} free European proxies. Testing connection...")
-            for item in data:
-                ip = item.get('ip')
-                port = item.get('port')
-                proto = item.get('protocols', ['http'])[0]
-                proxy_str = f"{proto}://{ip}:{port}"
-                
+            proxies = [p.strip() for p in resp.text.splitlines() if p.strip()]
+            logger.info(f"Fetched {len(proxies)} free European proxies. Testing connection...")
+            for p in proxies[:15]:
+                proxy_str = f"http://{p}"
                 # Test the proxy
                 try:
                     test_resp = requests.get(
                         "https://api.binance.com/api/v3/ping",
                         proxies={"http": proxy_str, "https": proxy_str},
-                        timeout=5
+                        timeout=3
                     )
                     if test_resp.status_code == 200:
-                        # Double check that we don't get the restricted location error!
                         if "restricted location" not in test_resp.text:
                             logger.info(f"Successfully found working EU Proxy: {proxy_str}")
                             return proxy_str
