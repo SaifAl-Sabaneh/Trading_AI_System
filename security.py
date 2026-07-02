@@ -258,7 +258,7 @@ def push_to_github():
             return False
             
         for f in existing_files:
-            subprocess.run(["git", "add", f], check=True, capture_output=True)
+            subprocess.run(["git", "add", "-f", f], check=True, capture_output=True)
             
         # 4. Commit changes
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
