@@ -58,16 +58,16 @@ def get_eu_proxy():
             logger.info(f"Fetched {len(proxies)} free European proxies. Testing connection...")
             for p in proxies[:15]:
                 proxy_str = f"http://{p}"
-                # Test the proxy against Spot API (geoblocks apply to all endpoints)
+                # Test the proxy against Futures API (since we trade Futures)
                 try:
                     test_resp = requests.get(
-                        "https://api.binance.com/api/v3/ping",
+                        "https://fapi.binance.com/fapi/v1/ping",
                         proxies={"http": proxy_str, "https": proxy_str},
                         timeout=5
                     )
                     if test_resp.status_code == 200:
                         if "restricted location" not in test_resp.text:
-                            logger.info(f"Successfully found working EU Proxy: {proxy_str}")
+                            logger.info(f"Successfully found working EU Futures Proxy: {proxy_str}")
                             return proxy_str
                 except Exception:
                     continue
