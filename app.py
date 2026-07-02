@@ -65,6 +65,7 @@ def get_stats():
         exchange = get_exchange_connection()
         balance = get_futures_balance(exchange)
     except Exception as e:
+        log_to_dashboard(f"Dashboard failed to fetch balance: {e}")
         balance = 0.0
         
     initial_cap = 32.33
