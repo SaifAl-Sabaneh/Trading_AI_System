@@ -23,7 +23,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import config
 from model import EnsembleTradingModel
 from features import build_features
-from security import logger, send_push_notification, calculate_live_accuracy, generate_ai_commentary
+from security import logger, send_push_notification, calculate_live_accuracy, generate_ai_commentary, push_to_github
 
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
@@ -386,20 +386,106 @@ def execute_live_trading():
         except Exception as e:
             logger.error(f"Error executing live trade cycle for {ticker}: {e}")
             
-    # Send daily passive cash commentary if no trades are active or taken
+    # Update live dashboard files and push to GitHub
     try:
-        active_positions = check_active_positions(exchange)
-        if len(active_positions) == 0:
-            # Generate and send daily cash review comment
-            ai_opinion = generate_ai_commentary(is_live=True, regime="Sideways")
-            send_push_notification(
-                f"📊 **Daily Live Status Update**:\n"
-                f"• **Current Balance**: `${usdt_balance:,.2f}`\n"
-                f"• **Status**: In Cash (No Active Positions)\n"
-                f"🤖 **AI Analyst Review**: *{ai_opinion}*"
-            )
-    except Exception:
-        pass
+        update_live_dashboard(usdt_balance)
+        push_to_github()
+    except Exception as e:
+        logger.error(f"Failed to auto-deploy live dashboard: {e}")
+
+def update_live_dashboard(usdt_balance):
+    """
+    Updates dashboard files (portfolio_state.js, portfolio_performance.png, report.html)
+    based on the live trading history logged in executed_trades.csv.
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import json
+        
+        csv_path = 'executed_trades.csv'
+        trades_list = []
+        if os.path.exists(csv_path):
+            try:
+                df_trades = pd.read_csv(csv_path)
+                trades_list = df_trades.to_dict(orient='records')
+            except Exception:
+                pass
+                
+        # Calculate performance statistics
+        initial_capital = 32.33
+        final_value = usdt_balance
+        return_pct = (final_value - initial_capital) / initial_capital if initial_capital > 0 else 0.0
+        
+        # Build equity curve series from trade history
+        dates = ['2026-07-01']
+        values = [initial_capital]
+        
+        running_bal = initial_capital
+        for tr in trades_list:
+            running_bal += float(tr.get('PnL_USD', 0.0))
+            dates.append(str(tr.get('ExitTime', datetime.now().strftime("%Y-%m-%d")))[:10])
+            values.append(running_bal)
+            
+        # Draw and save equity curve chart
+        plt.figure(figsize=(10, 5))
+        plt.plot(dates, values, marker='o', color='#14b8a6', linewidth=2, label='Live Portfolio')
+        plt.axhline(initial_capital, color='#4b5563', linestyle='--', alpha=0.5, label='Initial Capital ($32.33)')
+        plt.title('Live Bot Portfolio Performance ($)', color='white')
+        plt.xlabel('Date', color='white')
+        plt.ylabel('Balance (USDT)', color='white')
+        plt.grid(True, color='#1f2937', alpha=0.5)
+        plt.legend()
+        
+        # Style chart for dark mode dashboard
+        fig = plt.gcf()
+        fig.patch.set_facecolor('#0f172a')
+        ax = plt.gca()
+        ax.set_facecolor('#1e293b')
+        ax.tick_params(colors='white')
+        ax.spines['bottom'].set_color('#334155')
+        ax.spines['top'].set_color('#334155')
+        ax.spines['left'].set_color('#334155')
+        ax.spines['right'].set_color('#334155')
+        
+        plt.savefig('portfolio_performance.png', facecolor='#0f172a', bbox_inches='tight')
+        plt.close()
+        
+        # Generate portfolio_state.js data
+        equity_curve_data = [{"date": d, "value": v} for d, v in zip(dates, values)]
+        
+        # Win Rate
+        wins = sum(1 for tr in trades_list if float(tr.get('PnL_USD', 0.0)) > 0)
+        total = len(trades_list)
+        win_rate = (wins / total) if total > 0 else 0.0
+        
+        portfolio_state = {
+            "ticker_list": config.TICKERS,
+            "initial_capital": initial_capital,
+            "final_value": final_value,
+            "return_pct": return_pct,
+            "benchmark_return_pct": 0.0,
+            "max_drawdown": 0.0,
+            "sharpe_ratio": 0.0,
+            "trades_count": total,
+            "win_rate": win_rate,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "circuit_breaker_tripped": False,
+            "circuit_breaker_date": "",
+            "equity_curve": equity_curve_data,
+            "benchmark_curve": [],
+            "trades": trades_list
+        }
+        
+        # Write portfolio_state.js
+        js_content = f"const PORTFOLIO_STATE = {json.dumps(portfolio_state, indent=2)};"
+        with open("portfolio_state.js", "w") as f:
+            f.write(js_content)
+        logger.info("Live portfolio_state.js written successfully.")
+        
+    except Exception as e:
+        logger.error(f"Failed to update live dashboard files: {e}")
 
 if __name__ == "__main__":
     execute_live_trading()
