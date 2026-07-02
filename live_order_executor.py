@@ -58,22 +58,16 @@ def get_eu_proxy():
             logger.info(f"Fetched {len(proxies)} free European proxies. Testing connection...")
             for p in proxies[:15]:
                 proxy_str = f"http://{p}"
-                # Test the proxy
+                # Test the proxy against Spot API (geoblocks apply to all endpoints)
                 try:
-                    # Test both Linear Futures (fapi) and Inverse Futures (dapi)
-                    test_fapi = requests.get(
-                        "https://fapi.binance.com/fapi/v1/ping",
+                    test_resp = requests.get(
+                        "https://api.binance.com/api/v3/ping",
                         proxies={"http": proxy_str, "https": proxy_str},
-                        timeout=3
+                        timeout=5
                     )
-                    test_dapi = requests.get(
-                        "https://dapi.binance.com/dapi/v1/ping",
-                        proxies={"http": proxy_str, "https": proxy_str},
-                        timeout=3
-                    )
-                    if test_fapi.status_code == 200 and test_dapi.status_code == 200:
-                        if "restricted location" not in test_fapi.text and "restricted location" not in test_dapi.text:
-                            logger.info(f"Successfully found working EU Full Futures Proxy: {proxy_str}")
+                    if test_resp.status_code == 200:
+                        if "restricted location" not in test_resp.text:
+                            logger.info(f"Successfully found working EU Proxy: {proxy_str}")
                             return proxy_str
                 except Exception:
                     continue
@@ -90,6 +84,7 @@ def get_exchange_connection():
         'apiKey': api_key,
         'secret': secret_key,
         'enableRateLimit': True,
+        'timeout': 15000,  # Set connection timeout to 15 seconds for slow proxies
         'options': {
             'defaultType': 'future',  # Target USDT-M Futures account
         }
