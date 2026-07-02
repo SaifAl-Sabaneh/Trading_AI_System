@@ -1,0 +1,38 @@
+const PORTFOLIO_STATE = {
+  "ticker_list": [
+    "COIN",
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "BNB-USD",
+    "AVAX-USD",
+    "LINK-USD",
+    "ADA-USD",
+    "XRP-USD",
+    "DOT-USD",
+    "DOGE-USD",
+    "TSLA",
+    "NVDA",
+    "AMZN",
+    "META"
+  ],
+  "initial_capital": 32.33,
+  "final_value": 32.33353878,
+  "return_pct": 0.00010945808846271326,
+  "benchmark_return_pct": 0.0,
+  "max_drawdown": 0.0,
+  "sharpe_ratio": 0.0,
+  "trades_count": 0,
+  "win_rate": 0.0,
+  "last_updated": "2026-07-02 02:16:24",
+  "circuit_breaker_tripped": false,
+  "circuit_breaker_date": "",
+  "equity_curve": [
+    {
+      "date": "2026-07-01",
+      "value": 32.33
+    }
+  ],
+  "benchmark_curve": [],
+  "trades": []
+};
