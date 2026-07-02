@@ -161,7 +161,7 @@ def execute_live_trading():
     for ticker, symbol in SYMBOL_MAP.items():
         try:
             import yfinance as yf
-            df = yf.download(ticker, period="250d", interval="1d", progress=False)
+            df = yf.download(ticker, period="500d", interval="1d", progress=False)
             if df.empty:
                 continue
             if isinstance(df.columns, pd.MultiIndex):
@@ -198,8 +198,9 @@ def execute_live_trading():
             # Check market regime (HMM)
             from regime_filter import MarketRegimeFilter
             regime_filter = MarketRegimeFilter()
-            regime_scale = regime_filter.compute_regime_sizing(df_clean)
-            current_regime = regime_filter.classifier.predict_regime(df_clean).iloc[-1]
+            regime_scales = regime_filter.compute_regime_sizing(df_clean)
+            regime_scale = float(regime_scales.iloc[-1])
+            current_regime = str(df_clean.iloc[-1]['Regime_Label'])
             
             logger.info(f"{ticker} -> Signal: {sig_val}, Prob: {prob_val:.2%}, Regime: {current_regime} (Scale: {regime_scale})")
 
