@@ -44,37 +44,6 @@ SYMBOL_MAP = {
     'DOGE-USD': 'DOGE/USDT'
 }
 
-def get_eu_proxy():
-    """
-    Fetches a list of free European HTTP proxies from ProxyScrape API,
-    and returns the first one that successfully pings api.binance.com.
-    """
-    import requests
-    url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=DE,FR,GB,NL,ES,IT&ssl=all&anonymity=all"
-    try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200:
-            proxies = [p.strip() for p in resp.text.splitlines() if p.strip()]
-            logger.info(f"Fetched {len(proxies)} free European proxies. Testing connection...")
-            for p in proxies[:15]:
-                proxy_str = f"http://{p}"
-                # Test the proxy against Futures API (since we trade Futures)
-                try:
-                    test_resp = requests.get(
-                        "https://fapi.binance.com/fapi/v1/ping",
-                        proxies={"http": proxy_str, "https": proxy_str},
-                        timeout=5
-                    )
-                    if test_resp.status_code == 200:
-                        if "restricted location" not in test_resp.text:
-                            logger.info(f"Successfully found working EU Futures Proxy: {proxy_str}")
-                            return proxy_str
-                except Exception:
-                    continue
-    except Exception as e:
-        logger.warning(f"Failed to fetch proxy list: {e}")
-    return None
-
 def get_exchange_connection():
     """Initializes and returns ccxt Binance Futures connection."""
     if not api_key or not secret_key:
@@ -84,22 +53,27 @@ def get_exchange_connection():
         'apiKey': api_key,
         'secret': secret_key,
         'enableRateLimit': True,
-        'timeout': 15000,  # Set connection timeout to 15 seconds for slow proxies
+        'timeout': 15000,  # Set connection timeout to 15 seconds
         'options': {
             'defaultType': 'future',  # Target USDT-M Futures account
         }
     }
     
-    # Bypass US IP blocks using auto-rotated European proxy
-    proxy = get_eu_proxy()
+    # Bypass US IP blocks using secure premium proxy (from environment / secrets)
+    proxy = os.getenv("PROXY_URL", "")
     if proxy:
+        # Mask credentials in logs for security
+        masked_proxy = proxy
+        if "@" in proxy:
+            parts = proxy.split("@")
+            masked_proxy = f"http://***:***@{parts[-1]}"
+        logger.info(f"Configured CCXT with premium proxy: {masked_proxy}")
         config_dict['proxies'] = {
             'http': proxy,
             'https': proxy
         }
-        logger.info(f"Configured CCXT with working proxy: {proxy}")
     else:
-        logger.warning("No working European proxies found. Connecting directly.")
+        logger.warning("No premium PROXY_URL found in environment secrets. Connecting directly.")
         
     exchange = ccxt.binance(config_dict)
     return exchange
