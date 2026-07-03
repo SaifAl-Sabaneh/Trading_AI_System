@@ -121,6 +121,8 @@ def check_active_positions(exchange):
         size = float(pos.get('contracts', 0.0))
         if size > 0:
             symbol = pos['symbol']
+            if ':' in symbol:
+                symbol = symbol.split(':')[0]
             active_positions[symbol] = {
                 'size': size,
                 'side': pos['side'].lower(), # 'long' or 'short'
@@ -395,6 +397,7 @@ def execute_live_trading():
                         type='STOP_MARKET',
                         side=sl_side,
                         amount=units,
+                        price=None,
                         params={
                             'stopPrice': sl_price,
                             'reduceOnly': True
@@ -407,6 +410,7 @@ def execute_live_trading():
                         type='TAKE_PROFIT_MARKET',
                         side=sl_side,
                         amount=units,
+                        price=None,
                         params={
                             'stopPrice': tp_price,
                             'reduceOnly': True
