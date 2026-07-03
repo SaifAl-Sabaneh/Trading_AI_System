@@ -177,6 +177,7 @@ def execute_live_trading():
             pass
 
     trades_triggered = 0
+    veto_log = []
 
     # 4. Generate today's signals and run execution for crypto assets
     for ticker, symbol in SYMBOL_MAP.items():
@@ -298,15 +299,21 @@ def execute_live_trading():
                 is_long_triggered = (sig_val == 1 and prob_val >= config.CONFIDENCE_THRESHOLD_LONG)
                 is_short_triggered = (sig_val == -1 and prob_val <= config.CONFIDENCE_THRESHOLD_SHORT)
                 
+                if not allow_entry and (is_long_triggered or is_short_triggered):
+                    logger.info(f"Regime Block: VETOED entry on {symbol} due to Crisis regime halt.")
+                    veto_log.append(f"• **{ticker}** vetoed: Crisis Market Regime halt")
+                
                 if allow_entry and (is_long_triggered or is_short_triggered):
                     # 1. Check Strict Trend Lock (Longs only above 200 SMA, Shorts only below 200 SMA)
                     if getattr(config, 'STRICT_TREND_LOCK', False):
                         sma200 = float(df_clean.iloc[-1]['SMA_200'])
                         if is_long_triggered and latest_close < sma200:
                             logger.info(f"Trend Lock: VETOED LONG on {symbol} — price ({latest_close:.2f}) is below 200 SMA ({sma200:.2f}).")
+                            veto_log.append(f"• **{ticker}** long vetoed: Price (${latest_close:.2f}) below 200 SMA (${sma200:.2f})")
                             continue
                         if is_short_triggered and latest_close > sma200:
                             logger.info(f"Trend Lock: VETOED SHORT on {symbol} — price ({latest_close:.2f}) is above 200 SMA ({sma200:.2f}).")
+                            veto_log.append(f"• **{ticker}** short vetoed: Price (${latest_close:.2f}) above 200 SMA (${sma200:.2f})")
                             continue
                             
                     # 2. Check Extreme Fear Block (No shorting if F&G index < 25)
@@ -314,6 +321,7 @@ def execute_live_trading():
                         fng_score = float(df_clean.iloc[-1]['Sentiment_Score'])
                         if fng_score < getattr(config, 'FEAR_LIMIT', 25):
                             logger.info(f"Fear Block: VETOED SHORT on {symbol} — Sentiment Index ({fng_score:.1f}) is in Extreme Fear (< {getattr(config, 'FEAR_LIMIT', 25)}).")
+                            veto_log.append(f"• **{ticker}** short vetoed: Extreme Fear sentiment (${fng_score:.1f})")
                             continue
 
                     # 3. Check RL Agent Veto
@@ -321,6 +329,7 @@ def execute_live_trading():
                         confirmed = rl_agent.should_take_action(sig_val, current_regime, prob_val)
                         if not confirmed:
                             logger.info(f"RL Agent: VETOED entry signal on {symbol} due to poor Q-value regime profile.")
+                            veto_log.append(f"• **{ticker}** vetoed: Q-Learning Agent veto")
                             continue
                             
                     logger.info(f"Triggering entry for {symbol} ({'LONG' if is_long_triggered else 'SHORT'})...")
@@ -418,11 +427,20 @@ def execute_live_trading():
 
     # Send daily status summary to Discord
     try:
+        reasons_msg = ""
+        if trades_triggered > 0:
+            reasons_msg = "• Status: Trades executed successfully."
+        elif veto_log:
+            reasons_msg = f"🔍 **Scan Details & Veto Log**:\n" + "\n".join(veto_log)
+        else:
+            reasons_msg = "🔍 **Scan Details**: No high-conviction AI signals triggered today (all assets below 45% threshold)."
+
         summary_msg = (
             f"📊 **Daily Crypto Scan Complete**\n"
             f"• Futures Balance: `${usdt_balance:,.2f}`\n"
             f"• Active Positions: `{len(active_positions)}`\n"
-            f"• Trades Triggered Today: `{trades_triggered}`\n"
+            f"• Trades Triggered Today: `{trades_triggered}`\n\n"
+            f"{reasons_msg}\n\n"
             f"• Status: Active & Monitoring"
         )
         send_push_notification(summary_msg)
