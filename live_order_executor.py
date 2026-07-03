@@ -45,7 +45,11 @@ SYMBOL_MAP = {
     'SUI20947-USD': 'SUI/USDT',
     'NEAR-USD': 'NEAR/USDT',
     'LTC-USD': 'LTC/USDT',
-    'TRX-USD': 'TRX/USDT'
+    'TRX-USD': 'TRX/USDT',
+    'OP-USD': 'OP/USDT',
+    'INJ-USD': 'INJ/USDT',
+    'BCH-USD': 'BCH/USDT',
+    'SHIB-USD': 'SHIB/USDT'
 }
 
 def get_exchange_connection():
