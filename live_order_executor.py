@@ -42,7 +42,7 @@ SYMBOL_MAP = {
     'XRP-USD': 'XRP/USDT',
     'DOT-USD': 'DOT/USDT',
     'DOGE-USD': 'DOGE/USDT',
-    'SUI-USD': 'SUI/USDT',
+    'SUI20947-USD': 'SUI/USDT',
     'NEAR-USD': 'NEAR/USDT',
     'LTC-USD': 'LTC/USDT',
     'TRX-USD': 'TRX/USDT'
