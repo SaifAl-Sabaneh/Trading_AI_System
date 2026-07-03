@@ -4,6 +4,8 @@ on:
   schedule:
     # Run every 4 hours at 37 minutes past the hour to bypass peak queue congestion (24/7 monitoring)
     - cron: '37 */4 * * *'
+  repository_dispatch:
+    types: [cron_trigger]
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
