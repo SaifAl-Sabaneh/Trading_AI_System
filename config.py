@@ -7,7 +7,7 @@ load_dotenv()
 # ----------------- SECURITY & ENV SETTINGS -----------------
 API_KEY = os.getenv("EXCHANGE_API_KEY", "")
 SECRET_KEY = os.getenv("EXCHANGE_SECRET_KEY", "")
-IS_SANDBOX = True              # Safe mode: True for mock paper-trading, False for live money
+IS_SANDBOX = False             # Safe mode: True for mock paper-trading, False for live money
 
 # ----------------- DATA SETTINGS -----------------
 TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI20947-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "SHIB-USD", "TSLA", "NVDA", "AMZN", "META"] # High-momentum universe
