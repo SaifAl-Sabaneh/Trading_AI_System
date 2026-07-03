@@ -176,6 +176,8 @@ def execute_live_trading():
         except Exception:
             pass
 
+    trades_triggered = 0
+
     # 4. Generate today's signals and run execution for crypto assets
     for ticker, symbol in SYMBOL_MAP.items():
         try:
@@ -355,6 +357,7 @@ def execute_live_trading():
                     
                     entry_price = float(entry_order.get('price', latest_close))
                     logger.info(f"Entered trade on {symbol} at price {entry_price:.2f}.")
+                    trades_triggered += 1
                     
                     # Calculate Stop-Loss and Take-Profit price levels
                     if is_long_triggered:
@@ -412,6 +415,20 @@ def execute_live_trading():
         push_to_github()
     except Exception as e:
         logger.error(f"Failed to auto-deploy live dashboard: {e}")
+
+    # Send daily status summary to Discord
+    try:
+        summary_msg = (
+            f"📊 **Daily Crypto Scan Complete**\n"
+            f"• Futures Balance: `${usdt_balance:,.2f}`\n"
+            f"• Active Positions: `{len(active_positions)}`\n"
+            f"• Trades Triggered Today: `{trades_triggered}`\n"
+            f"• Status: Active & Monitoring"
+        )
+        send_push_notification(summary_msg)
+        logger.info("Daily summary sent to Discord.")
+    except Exception as e:
+        logger.error(f"Failed to send daily summary: {e}")
 
 def update_live_dashboard(usdt_balance):
     """
