@@ -41,7 +41,11 @@ SYMBOL_MAP = {
     'ADA-USD': 'ADA/USDT',
     'XRP-USD': 'XRP/USDT',
     'DOT-USD': 'DOT/USDT',
-    'DOGE-USD': 'DOGE/USDT'
+    'DOGE-USD': 'DOGE/USDT',
+    'SUI-USD': 'SUI/USDT',
+    'NEAR-USD': 'NEAR/USDT',
+    'LTC-USD': 'LTC/USDT',
+    'TRX-USD': 'TRX/USDT'
 }
 
 def get_exchange_connection():

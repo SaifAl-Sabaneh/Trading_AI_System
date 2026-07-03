@@ -10,9 +10,9 @@ SECRET_KEY = os.getenv("EXCHANGE_SECRET_KEY", "")
 IS_SANDBOX = True              # Safe mode: True for mock paper-trading, False for live money
 
 # ----------------- DATA SETTINGS -----------------
-TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "TSLA", "NVDA", "AMZN", "META"] # High-momentum 15-asset growth and crypto universe
-SHORTABLE_TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "TSLA", "NVDA", "AMZN", "META"] # All 15 assets allowed for shorting
-CRYPTO_TICKERS    = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "COIN"] # Crypto assets eligible for on-chain features
+TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "TSLA", "NVDA", "AMZN", "META"] # High-momentum universe
+SHORTABLE_TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "TSLA", "NVDA", "AMZN", "META"]
+CRYPTO_TICKERS    = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "COIN"] # Crypto assets eligible for on-chain features
 START_DATE = "2023-01-01"      # Historical data start date
 END_DATE = "2026-06-25"        # Historical data end date
 INTERVAL = "1d"                # Timeframe interval (e.g., '1d')
