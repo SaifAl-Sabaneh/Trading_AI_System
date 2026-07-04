@@ -482,10 +482,11 @@ def execute_live_trading():
         weekly_pnl = calculate_weekly_pnl(trade_history)
         acceleration_msg = ""
         if weekly_pnl > 0.0:
+            suggested_deposit = max(20, int(round(weekly_pnl * 3.0, -1)))
             acceleration_msg = (
                 f"🚀 **Roadmap Acceleration Tip**:\n"
                 f"• Weekly Profit: `+${weekly_pnl:,.2f} USDT`!\n"
-                f"• The bot is on a winning streak. Consider depositing **$20 to $50** to speed up your compounding towards the $10,000 goal!\n\n"
+                f"• The bot is on a winning streak. Consider depositing **${suggested_deposit} USDT** to speed up compounding!\n\n"
             )
 
         reasons_msg = ""
