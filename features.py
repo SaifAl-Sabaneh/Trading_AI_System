@@ -93,6 +93,28 @@ def calculate_adx(df, window=14):
     adx = dx.rolling(window).mean()
     return adx
 
+def resample_to_4h(df):
+    """
+    Resamples a 1h timeframe DataFrame into 4h candles.
+    Ensures that the index is a DatetimeIndex and aggregates correctly.
+    """
+    if df.empty:
+        return df
+    
+    # Ensure index is datetime
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+        
+    df_resampled = df.resample('4h').agg({
+        'Open': 'first',
+        'High': 'max',
+        'Low': 'min',
+        'Close': 'last',
+        'Volume': 'sum'
+    }).dropna()
+    
+    return df_resampled
+
 def build_features(df, ticker=None):
     """
     Calculates features for ML model.

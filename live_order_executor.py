@@ -217,23 +217,24 @@ def execute_live_trading():
     for ticker, symbol in SYMBOL_MAP.items():
         try:
             import yfinance as yf
-            df = yf.download(ticker, period="500d", interval="1d", progress=False)
+            from features import resample_to_4h
+            from datetime import datetime, timedelta
+            
+            # Download 1h data (from last 75 days for speed and safety) and resample to 4h
+            start_date = (datetime.now() - timedelta(days=75)).strftime("%Y-%m-%d")
+            df = yf.download(ticker, start=start_date, interval="1h", progress=False)
             if df.empty:
                 continue
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
                 
-            # Align sentiment and 4h confirmation
-            df['Sentiment_Score'] = 50.0
-            df['Sentiment_MA7'] = 50.0
-            
-            from datetime import datetime, timedelta
-            start_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
-            df_4h = yf.download(ticker, start=start_date, interval="4h", progress=False)
-            if isinstance(df_4h.columns, pd.MultiIndex):
-                df_4h.columns = df_4h.columns.get_level_values(0)
-            from features import align_multi_timeframe_indicators
-            df = align_multi_timeframe_indicators(df, df_4h)
+            df = resample_to_4h(df)
+            if df.empty or len(df) < 50:
+                logger.warning(f"Insufficient 4h data for {ticker}")
+                continue
+                
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
             
             # Build indicators and retrieve latest values
             feature_cols = build_features(df, ticker=ticker)
@@ -320,9 +321,84 @@ def execute_live_trading():
                     )
                 else:
                     # Update Trailing / Breakeven rules
-                    # Move SL to Entry if price moved 0.8 * ATR in our favor
-                    # To keep it simple, we check if the current price allows it and update exchange order
-                    pass
+                    if getattr(config, 'ENABLE_BREAKEVEN', False) or getattr(config, 'ENABLE_TRAILING_TP', False):
+                        try:
+                            # 1. Fetch current open orders for this symbol
+                            open_orders = exchange.fetch_open_orders(symbol)
+                            sl_order = None
+                            for order in open_orders:
+                                if order.get('type') == 'STOP_MARKET' and order.get('side') == ('sell' if pos['side'] == 'long' else 'buy'):
+                                    sl_order = order
+                                    break
+                            
+                            current_sl = None
+                            if sl_order:
+                                current_sl = float(sl_order.get('stopPrice', sl_order.get('params', {}).get('stopPrice', 0)))
+                                if not current_sl and 'info' in sl_order:
+                                    current_sl = float(sl_order['info'].get('stopPrice', 0))
+                            
+                            # 2. Determine new SL price
+                            new_sl = None
+                            is_trailing = False
+                            
+                            if pos['side'] == 'long':
+                                # Check Trailing TP activation
+                                trail_activation = pos['entry_price'] + (config.TRAILING_TP_ACTIVATION_ATR_MULT * atr_val)
+                                breakeven_activation = pos['entry_price'] + (0.8 * atr_val)
+                                
+                                if latest_close >= trail_activation and getattr(config, 'ENABLE_TRAILING_TP', False):
+                                    trail_price = latest_close - (config.TRAILING_TP_CALLBACK_ATR_MULT * atr_val)
+                                    # Trailing stop only moves up
+                                    if current_sl is None or trail_price > current_sl:
+                                        new_sl = trail_price
+                                        is_trailing = True
+                                elif latest_close >= breakeven_activation and getattr(config, 'ENABLE_BREAKEVEN', False):
+                                    if current_sl is None or pos['entry_price'] > current_sl:
+                                        new_sl = pos['entry_price']
+                                        
+                            else: # Short position
+                                trail_activation = pos['entry_price'] - (config.TRAILING_TP_ACTIVATION_ATR_MULT * atr_val)
+                                breakeven_activation = pos['entry_price'] - (0.8 * atr_val)
+                                
+                                if latest_close <= trail_activation and getattr(config, 'ENABLE_TRAILING_TP', False):
+                                    trail_price = latest_close + (config.TRAILING_TP_CALLBACK_ATR_MULT * atr_val)
+                                    # Trailing stop only moves down
+                                    if current_sl is None or trail_price < current_sl:
+                                        new_sl = trail_price
+                                        is_trailing = True
+                                elif latest_close <= breakeven_activation and getattr(config, 'ENABLE_BREAKEVEN', False):
+                                    if current_sl is None or pos['entry_price'] < current_sl:
+                                        new_sl = pos['entry_price']
+                                        
+                            # 3. If new SL is determined and differs from current, update it
+                            if new_sl is not None and (current_sl is None or abs(new_sl - current_sl) > 0.00001):
+                                # Cancel old SL order
+                                if sl_order:
+                                    try:
+                                        exchange.cancel_order(sl_order['id'], symbol)
+                                    except Exception as ce:
+                                        logger.warning(f"Failed to cancel old SL order {sl_order['id']} for {symbol}: {ce}")
+                                
+                                # Create new SL order
+                                sl_side = 'sell' if pos['side'] == 'long' else 'buy'
+                                exchange.create_order(
+                                    symbol=symbol,
+                                    type='STOP_MARKET',
+                                    side=sl_side,
+                                    amount=pos['size'],
+                                    price=None,
+                                    params={
+                                        'stopPrice': new_sl,
+                                        'reduceOnly': True
+                                    }
+                                )
+                                logger.info(f"Updated SL for {symbol} to {new_sl:.5f} ({'Trailing' if is_trailing else 'Breakeven'})")
+                                send_push_notification(
+                                    f"🔄 **[UPDATE]** Moved Stop-Loss for **{ticker}** to **${new_sl:.5f}**\n"
+                                    f"• Mode: *{'Trailing Profit Lock' if is_trailing else 'Breakeven Shield'}* (Price: ${latest_close:.5f})"
+                                )
+                        except Exception as ex:
+                            logger.error(f"Failed to update trailing/breakeven stop-loss for {symbol}: {ex}")
                     
             # 6. New Entry Logic
             else:

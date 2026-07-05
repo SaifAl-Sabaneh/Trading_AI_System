@@ -15,7 +15,7 @@ SHORTABLE_TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-U
 CRYPTO_TICKERS    = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI20947-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "SHIB-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "TON11419-USD", "COIN"] # Crypto assets eligible for on-chain features
 START_DATE = "2023-01-01"      # Historical data start date
 END_DATE = "2026-06-25"        # Historical data end date
-INTERVAL = "1d"                # Timeframe interval (e.g., '1d')
+INTERVAL = "4h"                # Timeframe interval (resampled from 1h for 4-hour scans)
 
 # ----------------- LAYER 1: REGIME & TREND FILTER -----------------
 VOLATILITY_WINDOW = 20         # Period for volatility calculation
@@ -31,7 +31,7 @@ FORECAST_HORIZON = 10          # Prediction lookforward horizon (e.g., 10 days f
 TRAIN_TEST_SPLIT_RATIO = 0.7   # Proportion of data used for initial split
 ML_MODEL_TYPE = "ensemble"     # Stacking ensemble: RF + GB + CatBoost + LogisticRegression
 CONFIDENCE_THRESHOLD_LONG = 0.45  # Strict confidence threshold for buying/longing (calibrated to 0.45 to avoid bad early longs)
-CONFIDENCE_THRESHOLD_SHORT = 0.29 # Calibrated threshold for shorting (triggered when prob is <= 0.29)
+CONFIDENCE_THRESHOLD_SHORT = 0.33 # Calibrated threshold for shorting (increased to 0.33 to allow shorts on clean dumps)
 
 # ----------------- ADVANCED ML UPGRADES -----------------
 USE_SENTIMENT = True              # Use Crypto Fear & Greed Index daily sentiment features
@@ -46,6 +46,9 @@ TP_ATR_MULT = 2.5              # Take-Profit multiplier (restored to 2.5 for bal
 SL_ATR_MULT_LONG = 1.5         # Stop-Loss multiplier for long positions (optimized to avoid premature stop-outs)
 SL_ATR_MULT_SHORT = 1.0        # Stop-Loss multiplier for short positions (optimized to cut squeeze losses early)
 ENABLE_BREAKEVEN = True        # Move SL to Entry once price moves 0.8 * ATR in our favor (tightened)
+ENABLE_TRAILING_TP = True      # Enable dynamic trailing take-profit
+TRAILING_TP_ACTIVATION_ATR_MULT = 1.8 # Activate trailing mode once price moves 1.8x ATR in profit
+TRAILING_TP_CALLBACK_ATR_MULT = 0.5   # Float the stop-loss exactly 0.5x ATR below the peak
 
 INITIAL_CAPITAL = 10000.0      # Starting backtest capital in USD
 MAX_ALLOCATION_PER_TRADE = 0.20# Max portfolio allocation per trade (quality-focused 20% for faster compounded gains)

@@ -4,8 +4,9 @@ import pandas as pd
 import numpy as np
 import config
 from model import EnsembleTradingModel
-from features import build_features, calculate_triple_barrier_labels
+from features import build_features, calculate_triple_barrier_labels, resample_to_4h
 from security import logger
+from datetime import datetime, timedelta
 
 def main():
     logger.info("Starting one-time model training script...")
@@ -20,14 +21,35 @@ def main():
     processed_dfs = {}
     feature_cols = []
     
+    # If config.INTERVAL is "4h", we download 1h data from the last 725 days and resample
+    if config.INTERVAL == "4h":
+        start_date = (datetime.now() - timedelta(days=725)).strftime('%Y-%m-%d')
+        download_interval = "1h"
+    else:
+        start_date = config.START_DATE
+        download_interval = config.INTERVAL
+        
+    logger.info(f"Using download parameters: start={start_date}, interval={download_interval}")
+    
     for ticker in config.TICKERS:
         try:
-            df = yf.download(ticker, start=config.START_DATE, end=config.END_DATE, progress=False)
+            df = yf.download(ticker, start=start_date, end=config.END_DATE, interval=download_interval, progress=False)
             if df.empty:
                 logger.warning(f"No data returned for {ticker}")
                 continue
                 
             # Clean column names in case yfinance multi-index columns are present
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+                
+            # Resample 1h to 4h if needed
+            if config.INTERVAL == "4h":
+                df = resample_to_4h(df)
+                if df.empty or len(df) < 50:
+                    logger.warning(f"Insufficient resampled 4h data for {ticker}")
+                    continue
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
                 
