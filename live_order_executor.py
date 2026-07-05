@@ -16,7 +16,7 @@ import sys
 import ccxt
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -91,8 +91,10 @@ def get_exchange_connection():
     exchange = ccxt.binance(config_dict)
     return exchange
 
-def set_leverage_and_margin(exchange, symbol):
+def set_leverage_and_margin(exchange, symbol, leverage=None):
     """Sets isolated margin mode and leverage for the target symbol."""
+    if leverage is None:
+        leverage = getattr(config, 'LEVERAGE', 20)
     try:
         # 1. Set Isolated Margin Mode
         try:
@@ -107,8 +109,8 @@ def set_leverage_and_margin(exchange, symbol):
                 logger.warning(f"Could not set margin type for {symbol}: {e}")
                 
         # 2. Set Leverage
-        exchange.set_leverage(config.LEVERAGE, symbol)
-        logger.info(f"Set leverage to {config.LEVERAGE}x for {symbol}.")
+        exchange.set_leverage(int(leverage), symbol)
+        logger.info(f"Set leverage to {leverage}x for {symbol}.")
     except Exception as e:
         logger.error(f"Failed to configure leverage/margin for {symbol}: {e}")
 
@@ -162,6 +164,93 @@ def calculate_weekly_pnl(trade_history):
         except Exception:
             pass
     return total_pnl
+
+def get_news_sentiment_sizing_multiplier(ticker, signal_direction):
+    """
+    Downloads latest RSS headlines for the ticker, parses sentiment using VADER,
+    and returns a position size multiplier (1.0 or 0.25) depending on alignment.
+    """
+    if not getattr(config, 'ENABLE_SENTIMENT_SIZING', False):
+        return 1.0, 0.0, "Disabled"
+        
+    try:
+        import urllib.request
+        import xml.etree.ElementTree as ET
+        from features import get_vader_analyzer
+        import urllib.parse
+        
+        analyzer = get_vader_analyzer()
+        search_term = ticker.split('-')[0].lower() # e.g. btc-usd -> btc
+        
+        urls = [
+            f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+        ]
+        if ticker in getattr(config, 'CRYPTO_TICKERS', []):
+            urls.append("https://coindesk.com/arc/outboundfeeds/rss/")
+            
+        scores = []
+        for url in urls:
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    xml_data = response.read()
+                    root = ET.fromstring(xml_data)
+                    for item in root.findall('.//item'):
+                        title = item.find('title')
+                        pub_date = item.find('pubDate')
+                        if title is not None and title.text:
+                            headline = title.text.strip()
+                            if search_term in headline.lower():
+                                # Check recency if pubDate is available
+                                is_recent = True
+                                if pub_date is not None:
+                                    try:
+                                        dt = pd.to_datetime(pub_date.text).tz_localize(None)
+                                        # Limit search to the last 24 hours to keep sentiment fresh
+                                        if (datetime.now() - dt).total_seconds() > 86400:
+                                            is_recent = False
+                                    except Exception:
+                                        pass
+                                if is_recent:
+                                    vs = analyzer.polarity_scores(headline)
+                                    scores.append(vs['compound'])
+            except Exception:
+                continue
+                
+        if not scores:
+            logger.info(f"No recent news headlines found for {ticker}. Defaulting to neutral sentiment multiplier.")
+            return 1.0, 0.0, "No News (Neutral)"
+            
+        avg_score = float(np.mean(scores))
+        logger.info(f"News sentiment analysis for {ticker}: {len(scores)} recent articles, average compound score: {avg_score:.3f}")
+        
+        # Check alignment:
+        # Aligned: signal is Long (1) and sentiment is positive (>0.05), OR signal is Short (-1) and sentiment is negative (<-0.05)
+        # Misaligned: signal is Long (1) and sentiment is negative (<-0.05), OR signal is Short (-1) and sentiment is positive (>0.05)
+        is_aligned = True
+        sentiment_label = "Neutral"
+        
+        if avg_score > 0.05:
+            sentiment_label = "Bullish"
+            if signal_direction == -1:
+                is_aligned = False
+        elif avg_score < -0.05:
+            sentiment_label = "Bearish"
+            if signal_direction == 1:
+                is_aligned = False
+                
+        if is_aligned:
+            multiplier = getattr(config, 'SENTIMENT_SIZE_ALIGNED', 1.0)
+            status = f"Aligned ({sentiment_label})"
+        else:
+            multiplier = getattr(config, 'SENTIMENT_SIZE_MISALIGNED', 0.25)
+            status = f"MISALIGNED ({sentiment_label})"
+            logger.info(f"News Sentiment Veto: Sizing multiplier scaled to {multiplier} for {ticker} due to misalignment.")
+            
+        return multiplier, avg_score, status
+    except Exception as e:
+        logger.warning(f"Failed to calculate news sentiment sizing for {ticker}: {e}")
+        return 1.0, 0.0, f"Error: {e}"
 
 def execute_live_trading():
     logger.info("Starting Live Order Execution Engine...")
@@ -450,21 +539,48 @@ def execute_live_trading():
                         logger.warning("Futures account balance too low to trade.")
                         continue
                         
-                    # Calculate margin cash allocated (10%)
+                    # Calculate margin cash allocated (20%)
                     margin_allocated = usdt_balance * config.MAX_ALLOCATION_PER_TRADE
                     margin_allocated = max(2.50, margin_allocated) # Minimum $2.50 floor for sandbox
                     
                     # Sizing scale based on HMM
                     margin_allocated = margin_allocated * regime_scale
                     
+                    # Apply News Sentiment Sizing
+                    sentiment_status = "Not Checked"
+                    if getattr(config, 'ENABLE_SENTIMENT_SIZING', False):
+                        sent_multiplier, avg_sent, sentiment_status = get_news_sentiment_sizing_multiplier(ticker, sig_val)
+                        margin_allocated = margin_allocated * sent_multiplier
+                        
+                    # Calculate Dynamic Leverage based on ATR volatility percentile
+                    target_leverage = getattr(config, 'LEVERAGE', 20)
+                    vol_status = "Neutral"
+                    if getattr(config, 'ENABLE_DYNAMIC_LEVERAGE', False) and len(df_clean) >= 20:
+                        try:
+                            atr_pcts = (df_clean['ATR'] / df_clean['Close']).iloc[-100:]
+                            low_vol_limit = float(atr_pcts.quantile(0.25))
+                            high_vol_limit = float(atr_pcts.quantile(0.75))
+                            latest_atr_pct = atr_val / latest_close
+                            
+                            if latest_atr_pct <= low_vol_limit:
+                                target_leverage = getattr(config, 'LEVERAGE_VOL_LOW', 25)
+                                vol_status = "Low Volatility Squeeze"
+                            elif latest_atr_pct >= high_vol_limit:
+                                target_leverage = getattr(config, 'LEVERAGE_VOL_HIGH', 10)
+                                vol_status = "High Volatility Panic"
+                        except Exception as ve:
+                            logger.warning(f"Failed to calculate dynamic leverage metrics for {symbol}: {ve}")
+                            
+                    logger.info(f"Dynamic Sizing Summary for {symbol} -> Leverage: {target_leverage}x ({vol_status}), News Sizing Status: {sentiment_status}")
+                    
                     # Total position value = Margin * Leverage
-                    position_value = margin_allocated * config.LEVERAGE
+                    position_value = margin_allocated * target_leverage
                     
                     # Calculate units
                     units = position_value / latest_close
                     
-                    # Set exchange configuration
-                    set_leverage_and_margin(exchange, symbol)
+                    # Set exchange leverage and isolated margin mode
+                    set_leverage_and_margin(exchange, symbol, leverage=target_leverage)
                     
                     # Execute entry market order
                     order_side = 'buy' if is_long_triggered else 'sell'

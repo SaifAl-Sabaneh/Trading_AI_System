@@ -7,7 +7,7 @@ load_dotenv()
 # ----------------- SECURITY & ENV SETTINGS -----------------
 API_KEY = os.getenv("EXCHANGE_API_KEY", "")
 SECRET_KEY = os.getenv("EXCHANGE_SECRET_KEY", "")
-IS_SANDBOX = False             # Safe mode: True for mock paper-trading, False for live money
+IS_SANDBOX = False            # Safe mode: True for mock paper-trading, False for live money
 
 # ----------------- DATA SETTINGS -----------------
 TICKERS = ["COIN", "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI20947-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "SHIB-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "TON11419-USD", "TSLA", "NVDA", "AMZN", "META"] # High-momentum universe
@@ -52,7 +52,14 @@ TRAILING_TP_CALLBACK_ATR_MULT = 0.5   # Float the stop-loss exactly 0.5x ATR bel
 
 INITIAL_CAPITAL = 10000.0      # Starting backtest capital in USD
 MAX_ALLOCATION_PER_TRADE = 0.20# Max portfolio allocation per trade (quality-focused 20% for faster compounded gains)
-LEVERAGE = 20                  # 20x leverage multiplier for isolated futures margin
+LEVERAGE = 20                  # Default leverage multiplier
+ENABLE_DYNAMIC_LEVERAGE = True  # Enable volatility-adjusted leverage
+LEVERAGE_VOL_LOW = 25          # Calm squeezes get 25x leverage
+LEVERAGE_VOL_HIGH = 10         # High-volatility panic gets 10x leverage
+
+ENABLE_SENTIMENT_SIZING = True  # Scale position sizes based on global news sentiment
+SENTIMENT_SIZE_ALIGNED = 1.0    # 100% allocation if AI signal aligns with news sentiment
+SENTIMENT_SIZE_MISALIGNED = 0.25 # 25% allocation if AI signal conflicts with news sentiment (coin-flip trades)
 STRICT_TREND_LOCK = True       # Longs only above 200 SMA, Shorts only below 200 SMA
 EXTREME_FEAR_BLOCK = True      # Block short positions when Fear & Greed Index drops below FEAR_LIMIT
 FEAR_LIMIT = 25                # Extreme Fear threshold for blocking short entries
