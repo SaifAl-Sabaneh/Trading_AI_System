@@ -51,7 +51,7 @@ TRAILING_TP_ACTIVATION_ATR_MULT = 1.8 # Activate trailing mode once price moves 
 TRAILING_TP_CALLBACK_ATR_MULT = 0.5   # Float the stop-loss exactly 0.5x ATR below the peak
 
 INITIAL_CAPITAL = 10000.0      # Starting backtest capital in USD
-MAX_ALLOCATION_PER_TRADE = 0.20# Max portfolio allocation per trade (quality-focused 20% for faster compounded gains)
+MAX_ALLOCATION_PER_TRADE = 0.10# Defensive trade allocation (reduced from 20% to 10% for account recovery and stabilization)
 LEVERAGE = 20                  # Default leverage multiplier
 ENABLE_DYNAMIC_LEVERAGE = True  # Enable volatility-adjusted leverage
 LEVERAGE_VOL_LOW = 25          # Calm squeezes get 25x leverage
