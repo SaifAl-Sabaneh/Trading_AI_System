@@ -13,6 +13,7 @@ This script:
 
 import os
 import sys
+import time
 import ccxt
 import pandas as pd
 import numpy as np
@@ -109,10 +110,20 @@ def set_leverage_and_margin(exchange, symbol, leverage=None):
                 logger.warning(f"Could not set margin type for {symbol}: {e}")
                 
         # 2. Set Leverage
-        exchange.set_leverage(int(leverage), symbol)
-        logger.info(f"Set leverage to {leverage}x for {symbol}.")
+        try:
+            exchange.set_leverage(int(leverage), symbol)
+            logger.info(f"Set leverage to {leverage}x for {symbol}.")
+        except Exception as le:
+            # Fallback to 20x if account is restricted to maximum 20x (Binance new account rule)
+            if "leverage" in str(le).lower() or "-4300" in str(le):
+                logger.warning(f"Leverage {leverage}x rejected for {symbol} (likely new account restriction). Retrying with 20x fallback...")
+                exchange.set_leverage(20, symbol)
+                logger.info(f"Set leverage to 20x fallback for {symbol}.")
+            else:
+                raise le
     except Exception as e:
         logger.error(f"Failed to configure leverage/margin for {symbol}: {e}")
+        raise e
 
 def get_futures_balance(exchange):
     """Returns the free USDT balance in the Futures account."""
@@ -416,7 +427,8 @@ def execute_live_trading():
                             open_orders = exchange.fetch_open_orders(symbol)
                             sl_order = None
                             for order in open_orders:
-                                if order.get('type') == 'STOP_MARKET' and order.get('side') == ('sell' if pos['side'] == 'long' else 'buy'):
+                                order_type = order.get('type', '').lower()
+                                if order_type in ['stop_market', 'stop', 'stop_limit'] and order.get('side') == ('sell' if pos['side'] == 'long' else 'buy'):
                                     sl_order = order
                                     break
                             
@@ -458,6 +470,22 @@ def execute_live_trading():
                                 elif latest_close <= breakeven_activation and getattr(config, 'ENABLE_BREAKEVEN', False):
                                     if current_sl is None or pos['entry_price'] < current_sl:
                                         new_sl = pos['entry_price']
+                                        
+                            # 2b. Fail-Safe: If no stop-loss order exists on the exchange, recreate the initial SL
+                            if sl_order is None and new_sl is None:
+                                if pos['side'] == 'long':
+                                    initial_sl = pos['entry_price'] - (config.SL_ATR_MULT_LONG * atr_val)
+                                    if latest_close <= initial_sl:
+                                        new_sl = latest_close * 0.995
+                                    else:
+                                        new_sl = initial_sl
+                                else:
+                                    initial_sl = pos['entry_price'] + (config.SL_ATR_MULT_SHORT * atr_val)
+                                    if latest_close >= initial_sl:
+                                        new_sl = latest_close * 1.005
+                                    else:
+                                        new_sl = initial_sl
+                                logger.warning(f"Fail-Safe: Missing Stop-Loss detected for {symbol}. Recreating at {new_sl:.6f}")
                                         
                             # 3. If new SL is determined and differs from current, update it
                             if new_sl is not None and (current_sl is None or abs(new_sl - current_sl) > 0.00001):
@@ -590,7 +618,10 @@ def execute_live_trading():
                         amount=units
                     )
                     
-                    entry_price = float(entry_order.get('price', latest_close))
+                    entry_price = entry_order.get('price')
+                    if entry_price is None:
+                        entry_price = latest_close
+                    entry_price = float(entry_price)
                     logger.info(f"Entered trade on {symbol} at price {entry_price:.2f}.")
                     trades_triggered += 1
                     
@@ -602,6 +633,8 @@ def execute_live_trading():
                         sl_price = entry_price + (config.SL_ATR_MULT_SHORT * atr_val)
                         tp_price = entry_price - (config.TP_ATR_MULT * atr_val)
                         
+                    # Wait 1 second to prevent Binance API race condition on new positions
+                    time.sleep(1.0)
                     # Place Stop-Loss and Take-Profit orders on Binance (Reduce-Only)
                     # We cancel any stray orders first
                     cancel_all_orders(exchange, symbol)
