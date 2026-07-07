@@ -63,7 +63,7 @@ SYMBOL_MAP = {
     'APT-USD': 'APT/USDT',
     'TIA-USD': 'TIA/USDT',
     'RUNE-USD': 'RUNE/USDT',
-    'JUP-USD': 'JUP/USDT',
+    'JUP29210-USD': 'JUP/USDT',
     'LDO-USD': 'LDO/USDT'
 }
 
