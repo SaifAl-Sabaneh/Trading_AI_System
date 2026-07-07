@@ -754,6 +754,59 @@ def execute_live_trading():
         except Exception as e:
             logger.error(f"Error executing live trade cycle for {ticker}: {e}")
             
+    # Execute Profit Sweep if enabled
+    if getattr(config, 'ENABLE_PROFIT_SWEEP', False):
+        try:
+            current_futures_balance = get_futures_balance(exchange)
+            safety_threshold = getattr(config, 'FUTURES_SAFETY_THRESHOLD', 30.0)
+            if current_futures_balance > (safety_threshold + 1.0):
+                excess = current_futures_balance - safety_threshold
+                logger.info(f"Profit Sweep: Excess balance detected: ${excess:.2f} USDT. Initiating transfer from Futures to Spot...")
+                
+                # Execute Universal Transfer via CCXT
+                exchange.transfer(code='USDT', amount=excess, fromAccount='future', toAccount='spot')
+                logger.info(f"Profit Sweep: Transferred ${excess:.2f} USDT to Spot account successfully.")
+                
+                # Connect to Spot exchange
+                spot_exchange = ccxt.binance({
+                    'apiKey': exchange.apiKey,
+                    'secret': exchange.secret,
+                    'enableRateLimit': True,
+                    'options': {'defaultType': 'spot'}
+                })
+                
+                base = config.SWEEP_TARGET_ASSET.split("-")[0]
+                spot_symbol = f"{base}/USDT"
+                
+                logger.info(f"Profit Sweep: Purchasing {spot_symbol} on Spot with ${excess:.2f} USDT...")
+                
+                try:
+                    spot_order = spot_exchange.create_market_buy_order_with_cost(spot_symbol, excess)
+                except Exception as ex_cost:
+                    logger.info(f"create_market_buy_order_with_cost failed: {ex_cost}. Falling back to standard market buy...")
+                    ticker_info = spot_exchange.fetch_ticker(spot_symbol)
+                    ask_price = float(ticker_info['ask'])
+                    safe_excess = excess * 0.995  # 0.5% buffer for price ticks
+                    qty = safe_excess / ask_price
+                    spot_exchange.load_markets()
+                    qty_str = spot_exchange.amount_to_precision(spot_symbol, qty)
+                    spot_order = spot_exchange.create_market_buy_order(spot_symbol, float(qty_str))
+                
+                filled_qty = float(spot_order.get('amount', 0.0))
+                buy_price = float(spot_order.get('price', 0.0))
+                logger.info(f"Profit Sweep: Purchased {filled_qty:.6f} {base} at ${buy_price:.4f}")
+                
+                send_push_notification(
+                    f"💰 **[PROFIT SWEEP]** Transferred **${excess:.2f} USDT** to Spot and purchased **{base}**!\n"
+                    f"• Futures balance reset to safety threshold: **${safety_threshold:.2f} USDT**."
+                )
+                
+                # Update local balance reference
+                usdt_balance = get_futures_balance(exchange)
+        except Exception as te:
+            logger.error(f"Profit Sweep: Transfer or purchase failed: {te}")
+            send_push_notification(f"⚠️ **[WARNING]** Profit Sweep execution failed: {te}")
+
     # Update live dashboard files and push to GitHub
     try:
         update_live_dashboard(usdt_balance)

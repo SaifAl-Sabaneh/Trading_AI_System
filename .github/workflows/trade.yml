@@ -39,3 +39,17 @@ jobs:
           GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }} # Use default runner token to push dashboard updates
         run: |
           python live_order_executor.py
+
+      - name: Run Weekly Spot Rebalancer
+        env:
+          EXCHANGE_API_KEY: ${{ secrets.EXCHANGE_API_KEY }}
+          EXCHANGE_SECRET_KEY: ${{ secrets.EXCHANGE_SECRET_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          # Only run on Sunday (7) during the 00:00 UTC block (hour 00)
+          if [ "$(date +%u)" = "7" ] && [ "$(date +%H)" = "00" ]; then
+            echo "Executing weekly spot portfolio rebalancer..."
+            python spot_rebalancer.py
+          else
+            echo "Skipping spot rebalancing (not Sunday 00:00 UTC)."
+          fi

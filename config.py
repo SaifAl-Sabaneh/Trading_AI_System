@@ -114,6 +114,19 @@ LSTM_HIDDEN_SIZE = 32          # Number of hidden units in LSTM cell
 USE_RL_AGENT = True            # Enable RL agent veto layer to protect capital and boost profit margins
 
 
+# ----------------- PROFIT SWEEP & SPOT REBALANCER -----------------
+ENABLE_PROFIT_SWEEP = True
+FUTURES_SAFETY_THRESHOLD = 30.0    # Keep minimum $30 USDT in Futures to trade
+SWEEP_TARGET_ASSET = "BTC-USD"     # Sweep target (will map to BTC/USDT on Spot)
+
+ENABLE_SPOT_REBALANCING = True
+SPOT_REBALANCE_ALLOCATION = {
+    "BTC-USD": 0.50,               # 50% Bitcoin
+    "ETH-USD": 0.50                # 50% Ethereum
+}
+SPOT_REBALANCE_THRESHOLD = 0.03    # Rebalance only if deviation exceeds 3%
+
+
 # ----------------- SYSTEM LOGGING -----------------
 LOG_FILE_PATH = "trading_bot.log"
 LOG_LEVEL = "INFO"             # DEBUG, INFO, WARNING, ERROR, CRITICAL
