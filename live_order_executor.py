@@ -521,14 +521,16 @@ def execute_live_trading():
                                 
                                 # Create new SL order
                                 sl_side = 'sell' if pos['side'] == 'long' else 'buy'
+                                sl_price_prec = float(exchange.price_to_precision(symbol, new_sl))
+                                sl_amount_prec = float(exchange.amount_to_precision(symbol, pos['size']))
                                 exchange.create_order(
                                     symbol=symbol,
                                     type='STOP_MARKET',
                                     side=sl_side,
-                                    amount=pos['size'],
+                                    amount=sl_amount_prec,
                                     price=None,
                                     params={
-                                        'stopPrice': new_sl,
+                                        'stopPrice': sl_price_prec,
                                         'reduceOnly': True
                                     }
                                 )
@@ -772,10 +774,11 @@ def execute_live_trading():
                     
                     # Execute entry market order
                     order_side = 'buy' if is_long_triggered else 'sell'
+                    entry_amount = float(exchange.amount_to_precision(symbol, units))
                     entry_order = exchange.create_market_order(
                         symbol=symbol,
                         side=order_side,
-                        amount=units
+                        amount=entry_amount
                     )
                     
                     entry_price = entry_order.get('price')
@@ -793,6 +796,10 @@ def execute_live_trading():
                         sl_price = entry_price + (config.SL_ATR_MULT_SHORT * atr_val)
                         tp_price = entry_price - (config.TP_ATR_MULT * atr_val)
                         
+                    # Format prices to the exchange's required step size
+                    sl_price_prec = float(exchange.price_to_precision(symbol, sl_price))
+                    tp_price_prec = float(exchange.price_to_precision(symbol, tp_price))
+                    
                     # Wait 1 second to prevent Binance API race condition on new positions
                     time.sleep(1.0)
                     # Place Stop-Loss and Take-Profit orders on Binance (Reduce-Only)
@@ -805,10 +812,10 @@ def execute_live_trading():
                         symbol=symbol,
                         type='STOP_MARKET',
                         side=sl_side,
-                        amount=units,
+                        amount=entry_amount,
                         price=None,
                         params={
-                            'stopPrice': sl_price,
+                            'stopPrice': sl_price_prec,
                             'reduceOnly': True
                         }
                     )
@@ -818,22 +825,30 @@ def execute_live_trading():
                         symbol=symbol,
                         type='TAKE_PROFIT_MARKET',
                         side=sl_side,
-                        amount=units,
+                        amount=entry_amount,
                         price=None,
                         params={
-                            'stopPrice': tp_price,
+                            'stopPrice': tp_price_prec,
                             'reduceOnly': True
                         }
                     )
                     
-                    logger.info(f"Configured TP/SL orders for {symbol} (SL: {sl_price:.2f}, TP: {tp_price:.2f}).")
+                    logger.info(f"Configured TP/SL orders for {symbol} (SL: {sl_price_prec:.4f}, TP: {tp_price_prec:.4f}).")
+                    
+                    # Dynamic state update: Add to active_positions so subsequent loop iterations respect correlation caps
+                    active_positions[symbol] = {
+                        'size': entry_amount,
+                        'side': 'long' if is_long_triggered else 'short',
+                        'entry_price': entry_price,
+                        'unrealized_pnl': 0.0
+                    }
                     
                     # Send Discord entry notification
                     send_push_notification(
                         f"🟢 **[ENTRY]** Opened {'LONG' if is_long_triggered else 'SHORT'} on **{ticker}**\n"
                         f"• Entry Price: `${entry_price:,.2f}`\n"
                         f"• Position Size: `${position_value:,.2f}` (Margin: `${margin_allocated:,.2f}` @ 10x leverage)\n"
-                        f"• Protection Set: Stop-Loss at `{sl_price:.2f}` | Take-Profit at `{tp_price:.2f}`"
+                        f"• Protection Set: Stop-Loss at `{sl_price_prec:.4f}` | Take-Profit at `{tp_price_prec:.4f}`"
                     )
                     
         except Exception as e:
