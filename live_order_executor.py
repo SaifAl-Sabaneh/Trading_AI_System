@@ -643,6 +643,70 @@ def execute_live_trading():
                                     continue
                         except Exception as sme:
                             logger.warning(f"Failed to fetch Smart Money ratio for {symbol}: {sme}. Proceeding without filter.")
+
+                    # 5. Check Funding Rate Guard
+                    if getattr(config, 'ENABLE_FUNDING_FILTER', False):
+                        try:
+                            import requests
+                            binance_symbol = symbol.replace('/', '').split(':')[0]
+                            url = f"https://fapi.binance.com/fapi/v1/premiumIndex?symbol={binance_symbol}"
+                            res = requests.get(url, timeout=5).json()
+                            if res and isinstance(res, dict) and 'lastFundingRate' in res:
+                                funding_rate = float(res['lastFundingRate'])
+                                logger.info(f"Funding Rate Guard: {binance_symbol} Funding Rate: {funding_rate:.6f}")
+                                
+                                if is_long_triggered and funding_rate > getattr(config, 'FUNDING_LIMIT_LONG', 0.0005):
+                                    logger.info(f"Funding VETO: LONG on {symbol} blocked. Funding too high ({funding_rate:.6f} > {getattr(config, 'FUNDING_LIMIT_LONG', 0.0005)}).")
+                                    veto_log.append(f"• **{ticker}** long vetoed: Funding Rate too high ({funding_rate:.4%})")
+                                    continue
+                                if is_short_triggered and funding_rate < getattr(config, 'FUNDING_LIMIT_SHORT', -0.0005):
+                                    logger.info(f"Funding VETO: SHORT on {symbol} blocked. Funding too low ({funding_rate:.6f} < {getattr(config, 'FUNDING_LIMIT_SHORT', -0.0005)}).")
+                                    veto_log.append(f"• **{ticker}** short vetoed: Funding Rate too low ({funding_rate:.4%})")
+                                    continue
+                        except Exception as fe:
+                            logger.warning(f"Failed to fetch Funding Rate for {symbol}: {fe}. Proceeding without filter.")
+
+                    # 6. Check Open Interest Trend Tracker
+                    if getattr(config, 'ENABLE_OI_FILTER', False):
+                        try:
+                            import requests
+                            binance_symbol = symbol.replace('/', '').split(':')[0]
+                            url = f"https://fapi.binance.com/futures/data/openInterestHist?symbol={binance_symbol}&period={getattr(config, 'OI_PERIOD', '4h')}&limit=2"
+                            res = requests.get(url, timeout=5).json()
+                            if res and isinstance(res, list) and len(res) >= 2:
+                                prev_oi = float(res[0]['sumOpenInterest'])
+                                latest_oi = float(res[1]['sumOpenInterest'])
+                                oi_change = latest_oi - prev_oi
+                                logger.info(f"Open Interest Tracker: {binance_symbol} OI Prev: {prev_oi:.1f}, Latest: {latest_oi:.1f}, Change: {oi_change:.1f}")
+                                
+                                if oi_change <= 0:
+                                    logger.info(f"Open Interest VETO: Entry on {symbol} blocked. Open interest is decreasing or flat ({oi_change:.1f}).")
+                                    veto_log.append(f"• **{ticker}** vetoed: Open Interest declining ({oi_change:.1f})")
+                                    continue
+                        except Exception as oie:
+                            logger.warning(f"Failed to fetch Open Interest for {symbol}: {oie}. Proceeding without filter.")
+
+                    # 7. Check Taker Buy/Sell Volume Ratio
+                    if getattr(config, 'ENABLE_TAKER_FILTER', False):
+                        try:
+                            import requests
+                            binance_symbol = symbol.replace('/', '').split(':')[0]
+                            url = f"https://fapi.binance.com/futures/data/takerlongshortRatio?symbol={binance_symbol}&period={getattr(config, 'TAKER_PERIOD', '4h')}&limit=1"
+                            res = requests.get(url, timeout=5).json()
+                            if res and isinstance(res, list) and len(res) >= 1:
+                                taker_ratio = float(res[0]['buySellRatio'])
+                                logger.info(f"Taker Ratio Filter: {binance_symbol} Taker Buy/Sell Ratio: {taker_ratio:.2f}")
+                                
+                                if is_long_triggered and taker_ratio < getattr(config, 'TAKER_LIMIT_LONG', 1.0):
+                                    logger.info(f"Taker VETO: LONG on {symbol} blocked. Taker Buy/Sell Ratio: {taker_ratio:.2f} < 1.0.")
+                                    veto_log.append(f"• **{ticker}** long vetoed: Taker Buy/Sell Ratio low ({taker_ratio:.2f})")
+                                    continue
+                                if is_short_triggered and taker_ratio > getattr(config, 'TAKER_LIMIT_SHORT', 1.0):
+                                    logger.info(f"Taker VETO: SHORT on {symbol} blocked. Taker Buy/Sell Ratio: {taker_ratio:.2f} > 1.0.")
+                                    veto_log.append(f"• **{ticker}** short vetoed: Taker Buy/Sell Ratio high ({taker_ratio:.2f})")
+                                    continue
+                        except Exception as te:
+                            logger.warning(f"Failed to fetch Taker Ratio for {symbol}: {te}. Proceeding without filter.")
                             
                     logger.info(f"Triggering entry for {symbol} ({'LONG' if is_long_triggered else 'SHORT'})...")
                     

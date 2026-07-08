@@ -134,6 +134,22 @@ SMART_MONEY_THRESHOLD_LONG = 1.0   # Do not long if whales are net-short (ratio 
 SMART_MONEY_THRESHOLD_SHORT = 1.0  # Do not short if whales are net-long (ratio > 1.0)
 
 
+# ----------------- FUNDING RATE GUARD -----------------
+ENABLE_FUNDING_FILTER = True
+FUNDING_LIMIT_LONG = 0.0005        # 0.05% per 8h
+FUNDING_LIMIT_SHORT = -0.0005      # -0.05% per 8h
+
+# ----------------- OPEN INTEREST TRACKER -----------------
+ENABLE_OI_FILTER = True
+OI_PERIOD = "4h"
+
+# ----------------- TAKER BUY/SELL RATIO -----------------
+ENABLE_TAKER_FILTER = True
+TAKER_PERIOD = "4h"
+TAKER_LIMIT_LONG = 1.0             # Do not long if taker buy/sell ratio < 1.0
+TAKER_LIMIT_SHORT = 1.0            # Do not short if taker buy/sell ratio > 1.0
+
+
 # ----------------- SYSTEM LOGGING -----------------
 LOG_FILE_PATH = "trading_bot.log"
 LOG_LEVEL = "INFO"             # DEBUG, INFO, WARNING, ERROR, CRITICAL
