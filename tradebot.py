@@ -98,11 +98,10 @@ def get_exchange_connection():
     else:
         logger.warning("No premium PROXY_URL found in environment secrets. Connecting directly.")
         
-    if getattr(config, 'IS_SANDBOX', False):
-        config_dict.setdefault('options', {})['enableDemoTrading'] = True
-        logger.info("CCXT Demo Trading Option Activated (testnet).")
-        
     exchange = ccxt.binance(config_dict)
+    if getattr(config, 'IS_SANDBOX', False):
+        exchange.enable_demo_trading(True)
+        logger.info("CCXT Demo Trading Activated via enable_demo_trading(True).")
     return exchange
 
 def set_leverage_and_margin(exchange, symbol, leverage=None):
