@@ -10,9 +10,9 @@ SECRET_KEY = os.getenv("EXCHANGE_SECRET_KEY", "")
 IS_SANDBOX = True            # Safe mode: True for mock paper-trading, False for live money
 
 # ----------------- DATA SETTINGS -----------------
-TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI20947-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "SHIB-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "TON11419-USD", "PEPE24478-USD", "TAO22974-USD", "FTM-USD", "WLD-USD", "APT-USD", "TIA-USD", "RUNE-USD", "JUP29210-USD", "LDO-USD"] # High-momentum crypto universe
-SHORTABLE_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI20947-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "SHIB-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "TON11419-USD", "PEPE24478-USD", "TAO22974-USD", "FTM-USD", "WLD-USD", "APT-USD", "TIA-USD", "RUNE-USD", "JUP29210-USD", "LDO-USD"]
-CRYPTO_TICKERS    = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "SUI20947-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "SHIB-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "TON11419-USD", "PEPE24478-USD", "TAO22974-USD", "FTM-USD", "WLD-USD", "APT-USD", "TIA-USD", "RUNE-USD", "JUP29210-USD", "LDO-USD"] # Crypto assets eligible for on-chain features
+TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "ATOM-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "THETA-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "FIL-USD", "ETC-USD", "ALGO-USD", "AAVE-USD", "WLD-USD", "ICP-USD", "TIA-USD", "RUNE-USD", "SAND-USD", "LDO-USD"] # High-momentum crypto universe
+SHORTABLE_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "ATOM-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "THETA-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "FIL-USD", "ETC-USD", "ALGO-USD", "AAVE-USD", "WLD-USD", "ICP-USD", "TIA-USD", "RUNE-USD", "SAND-USD", "LDO-USD"]
+CRYPTO_TICKERS    = ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "AVAX-USD", "LINK-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "ATOM-USD", "NEAR-USD", "LTC-USD", "TRX-USD", "OP-USD", "INJ-USD", "BCH-USD", "THETA-USD", "WIF-USD", "ONDO-USD", "FET-USD", "RENDER-USD", "FIL-USD", "ETC-USD", "ALGO-USD", "AAVE-USD", "WLD-USD", "ICP-USD", "TIA-USD", "RUNE-USD", "SAND-USD", "LDO-USD"] # Crypto assets eligible for on-chain features
 START_DATE = "2023-01-01"      # Historical data start date
 END_DATE = "2026-06-25"        # Historical data end date
 INTERVAL = "4h"                # Timeframe interval (resampled from 1h for 4-hour scans)
@@ -56,7 +56,7 @@ LEVERAGE = 20                  # Default leverage multiplier
 ENABLE_DYNAMIC_LEVERAGE = True  # Enable volatility-adjusted leverage
 LEVERAGE_VOL_LOW = 25          # Calm squeezes get 25x leverage
 LEVERAGE_VOL_HIGH = 10         # High-volatility panic gets 10x leverage
-MAX_ACTIVE_POSITIONS = 2       # Max concurrent open positions allowed across the entire portfolio (to protect small capital from over-exposure)
+MAX_ACTIVE_POSITIONS = 5       # Max concurrent open positions allowed across the entire portfolio (to protect small capital from over-exposure)
 MAX_NOTIONAL_ALLOCATION_PCT = 0.50 # Max notional value of a single trade as a % of account balance (prevents exchange-minimum over-sizing)
 
 ENABLE_SENTIMENT_SIZING = True  # Scale position sizes based on global news sentiment
