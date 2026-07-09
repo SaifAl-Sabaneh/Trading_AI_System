@@ -855,7 +855,8 @@ def execute_live_trading():
                     # Stop-Loss Verification Loop (Query exchange to confirm SL is active, retry if missing, close if fails)
                     sl_verified = False
                     for attempt in range(3):
-                        time.sleep(1.5)  # Wait for exchange state update
+                        sleep_time = 1.5 * (2 ** attempt)  # Exponential backoff: 1.5s, 3.0s, 6.0s
+                        time.sleep(sleep_time)
                         try:
                             open_orders = exchange.fetch_open_orders(symbol)
                             for order in open_orders:
