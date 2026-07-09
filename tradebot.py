@@ -208,6 +208,43 @@ def cancel_all_orders(exchange, symbol):
     except Exception as e:
         logger.warning(f"Could not cancel orders for {symbol}: {e}")
 
+def find_active_stop_loss_order(exchange, symbol, sl_side):
+    """
+    Finds if an active stop-loss order exists for the symbol and side.
+    Queries both standard open orders and algo/conditional orders.
+    """
+    try:
+        # 1. Check standard open orders
+        open_orders = exchange.fetch_open_orders(symbol)
+        for order in open_orders:
+            order_type = order.get('type', '').lower()
+            order_side = order.get('side', '').lower()
+            if order_type in ['stop_market', 'stop', 'stop_limit'] and order_side == sl_side:
+                return order
+    except Exception as e:
+        logger.warning(f"Error fetching standard open orders for SL search on {symbol}: {e}")
+
+    try:
+        # 2. Check algo/conditional open orders (specifically for Binance Futures / Demo Exchange)
+        algo_orders = exchange.fetch_open_orders(symbol, params={'type': 'algo'})
+        for order in algo_orders:
+            info = order.get('info', {})
+            order_type_raw = info.get('orderType', '').upper()
+            algo_side = info.get('side', '').lower()
+            if 'STOP' in order_type_raw and algo_side == sl_side:
+                # Normalize CCXT format so standard keys are accessible
+                return {
+                    'id': order.get('id') or info.get('algoId'),
+                    'type': 'stop_market',
+                    'side': algo_side,
+                    'stopPrice': float(info.get('triggerPrice', 0.0) or 0.0),
+                    'info': info
+                }
+    except Exception as e:
+        pass
+
+    return None
+
 def calculate_weekly_pnl(trade_history):
     """Calculates total PnL USD of trades closed in the last 7 days."""
     if not trade_history:
@@ -486,28 +523,21 @@ def execute_live_trading():
                         f"🤖 **AI Analyst Review**: *{ai_opinion}*"
                     )
                 else:
-                    # Update Trailing / Breakeven rules
-                    if getattr(config, 'ENABLE_BREAKEVEN', False) or getattr(config, 'ENABLE_TRAILING_TP', False):
-                        try:
-                            # 1. Fetch current open orders for this symbol
-                            open_orders = exchange.fetch_open_orders(symbol)
-                            sl_order = None
-                            for order in open_orders:
-                                order_type = order.get('type', '').lower()
-                                if order_type in ['stop_market', 'stop', 'stop_limit'] and order.get('side') == ('sell' if pos['side'] == 'long' else 'buy'):
-                                    sl_order = order
-                                    break
-                            
-                            current_sl = None
-                            if sl_order:
-                                current_sl = float(sl_order.get('stopPrice', sl_order.get('params', {}).get('stopPrice', 0)))
-                                if not current_sl and 'info' in sl_order:
-                                    current_sl = float(sl_order['info'].get('stopPrice', 0))
-                            
-                            # 2. Determine new SL price
-                            new_sl = None
-                            is_trailing = False
-                            
+                    # Update Trailing / Breakeven rules and execute missing SL fail-safe
+                    try:
+                        # 1. Fetch current open stop-loss order for this symbol (standard and algo)
+                        sl_side = 'sell' if pos['side'] == 'long' else 'buy'
+                        sl_order = find_active_stop_loss_order(exchange, symbol, sl_side)
+                        
+                        current_sl = None
+                        if sl_order:
+                            current_sl = float(sl_order.get('stopPrice', 0.0))
+                        
+                        # 2. Determine new SL price if trailing/breakeven are enabled
+                        new_sl = None
+                        is_trailing = False
+                        
+                        if getattr(config, 'ENABLE_BREAKEVEN', False) or getattr(config, 'ENABLE_TRAILING_TP', False):
                             if pos['side'] == 'long':
                                 # Check Trailing TP activation
                                 trail_activation = pos['entry_price'] + (config.TRAILING_TP_ACTIVATION_ATR_MULT * atr_val)
@@ -515,7 +545,6 @@ def execute_live_trading():
                                 
                                 if latest_close >= trail_activation and getattr(config, 'ENABLE_TRAILING_TP', False):
                                     trail_price = latest_close - (config.TRAILING_TP_CALLBACK_ATR_MULT * atr_val)
-                                    # Trailing stop only moves up
                                     if current_sl is None or trail_price > current_sl:
                                         new_sl = trail_price
                                         is_trailing = True
@@ -529,7 +558,6 @@ def execute_live_trading():
                                 
                                 if latest_close <= trail_activation and getattr(config, 'ENABLE_TRAILING_TP', False):
                                     trail_price = latest_close + (config.TRAILING_TP_CALLBACK_ATR_MULT * atr_val)
-                                    # Trailing stop only moves down
                                     if current_sl is None or trail_price < current_sl:
                                         new_sl = trail_price
                                         is_trailing = True
@@ -537,36 +565,36 @@ def execute_live_trading():
                                     if current_sl is None or pos['entry_price'] < current_sl:
                                         new_sl = pos['entry_price']
                                         
-                            # 2b. Fail-Safe: If no stop-loss order exists on the exchange, recreate the initial SL
-                            if sl_order is None and new_sl is None:
-                                if pos['side'] == 'long':
-                                    initial_sl = pos['entry_price'] - (config.SL_ATR_MULT_LONG * atr_val)
-                                    if latest_close <= initial_sl:
-                                        new_sl = latest_close * 0.995
-                                    else:
-                                        new_sl = initial_sl
+                        # 2b. Fail-Safe: If no stop-loss order exists on the exchange, recreate it
+                        if sl_order is None and new_sl is None:
+                            if pos['side'] == 'long':
+                                initial_sl = pos['entry_price'] - (config.SL_ATR_MULT_LONG * atr_val)
+                                if latest_close <= initial_sl:
+                                    new_sl = latest_close * 0.995
                                 else:
-                                    initial_sl = pos['entry_price'] + (config.SL_ATR_MULT_SHORT * atr_val)
-                                    if latest_close >= initial_sl:
-                                        new_sl = latest_close * 1.005
-                                    else:
-                                        new_sl = initial_sl
-                                logger.warning(f"Fail-Safe: Missing Stop-Loss detected for {symbol}. Recreating at {new_sl:.6f}")
-                                        
-                            # 3. If new SL is determined and differs from current, update it
-                            if new_sl is not None and (current_sl is None or abs(new_sl - current_sl) > 0.00001):
-                                # Cancel old SL order
-                                if sl_order:
-                                    try:
-                                        exchange.cancel_order(sl_order['id'], symbol)
-                                    except Exception as ce:
-                                        logger.warning(f"Failed to cancel old SL order {sl_order['id']} for {symbol}: {ce}")
-                                
-                                # Create new SL order
-                                sl_side = 'sell' if pos['side'] == 'long' else 'buy'
-                                sl_price_prec = float(exchange.price_to_precision(symbol, new_sl))
-                                sl_amount_prec = float(exchange.amount_to_precision(symbol, pos['size']))
-                                exchange.create_order(
+                                    new_sl = initial_sl
+                            else:
+                                initial_sl = pos['entry_price'] + (config.SL_ATR_MULT_SHORT * atr_val)
+                                if latest_close >= initial_sl:
+                                    new_sl = latest_close * 1.005
+                                else:
+                                    new_sl = initial_sl
+                            logger.warning(f"Fail-Safe: Missing Stop-Loss detected for {symbol}. Recreating at {new_sl:.6f}")
+                                    
+                        # 3. If new SL is determined and differs from current, update it
+                        if new_sl is not None and (current_sl is None or abs(new_sl - current_sl) > 0.00001):
+                            # Cancel old SL order
+                            if sl_order:
+                                try:
+                                    exchange.cancel_order(sl_order['id'], symbol)
+                                except Exception as ce:
+                                    logger.warning(f"Failed to cancel old SL order {sl_order['id']} for {symbol}: {ce}")
+                            
+                            # Create new SL order
+                            sl_price_prec = float(exchange.price_to_precision(symbol, new_sl))
+                            sl_amount_prec = float(exchange.amount_to_precision(symbol, pos['size']))
+                            try:
+                                recreated_sl = exchange.create_order(
                                     symbol=symbol,
                                     type='STOP_MARKET',
                                     side=sl_side,
@@ -577,13 +605,34 @@ def execute_live_trading():
                                         'reduceOnly': True
                                     }
                                 )
-                                logger.info(f"Updated SL for {symbol} to {new_sl:.5f} ({'Trailing' if is_trailing else 'Breakeven'})")
+                                if recreated_sl.get('id'):
+                                    logger.info(f"Successfully placed/updated SL for {symbol} to {new_sl:.5f} ({'Trailing' if is_trailing else 'Breakeven' if current_sl else 'Fail-safe Recreation'})")
+                                    if current_sl is not None:
+                                        send_push_notification(
+                                            f"🔄 **[UPDATE]** Moved Stop-Loss for **{ticker}** to **${new_sl:.5f}**\n"
+                                            f"• Mode: *{'Trailing Profit Lock' if is_trailing else 'Breakeven Shield'}* (Price: ${latest_close:.5f})"
+                                        )
+                                else:
+                                    raise ValueError("Response missing order ID")
+                            except Exception as recreate_err:
+                                logger.critical(f"FATAL: Stop-Loss recreation/update FAILED for {symbol}: {recreate_err}. Executing emergency close!")
+                                close_side = 'sell' if pos['side'] == 'long' else 'buy'
+                                try:
+                                    exchange.create_market_order(
+                                        symbol=symbol,
+                                        side=close_side,
+                                        amount=pos['size'],
+                                        params={'reduceOnly': True}
+                                    )
+                                except Exception as ce:
+                                    logger.error(f"Failed to execute emergency market close for {symbol}: {ce}")
                                 send_push_notification(
-                                    f"🔄 **[UPDATE]** Moved Stop-Loss for **{ticker}** to **${new_sl:.5f}**\n"
-                                    f"• Mode: *{'Trailing Profit Lock' if is_trailing else 'Breakeven Shield'}* (Price: ${latest_close:.5f})"
+                                    f"🚨 **[EMERGENCY CLOSE]** Stop-loss recreation failed for **{ticker}**.\n"
+                                    f"• Position closed immediately at market to prevent unprotected risk!"
                                 )
-                        except Exception as ex:
-                            logger.error(f"Failed to update trailing/breakeven stop-loss for {symbol}: {ex}")
+                                continue
+                    except Exception as ex:
+                        logger.error(f"Failed to audit/update trailing/breakeven stop-loss for {symbol}: {ex}")
                     
             # 6. New Entry Logic
             else:
