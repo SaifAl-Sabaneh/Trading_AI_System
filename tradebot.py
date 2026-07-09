@@ -366,7 +366,7 @@ def execute_live_trading():
             logger.error(f"Failed to load RL Agent: {e}")
 
     # Load recent trade log to determine state/drawdowns
-    csv_path = 'executed_trades.csv'
+    csv_path = 'demo_trades.csv' if getattr(config, 'IS_SANDBOX', False) else 'executed_trades.csv'
     trade_history = []
     if os.path.exists(csv_path):
         try:
@@ -1096,7 +1096,7 @@ def update_live_dashboard(usdt_balance):
         import matplotlib.pyplot as plt
         import json
         
-        csv_path = 'executed_trades.csv'
+        csv_path = 'demo_trades.csv' if getattr(config, 'IS_SANDBOX', False) else 'executed_trades.csv'
         trades_list = []
         if os.path.exists(csv_path):
             try:
