@@ -1,5 +1,5 @@
 """
-live_order_executor.py — Live Binance Futures Order Execution Engine
+tradebot.py — Live Binance Futures Order Execution Engine
 
 This script:
 1. Connects to your Binance account using API Keys (Isolated Futures Mode).

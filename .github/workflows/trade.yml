@@ -38,7 +38,7 @@ jobs:
           PROXY_URL: ${{ secrets.PROXY_URL }}
           GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }} # Use default runner token to push dashboard updates
         run: |
-          python live_order_executor.py
+          python tradebot.py
 
       - name: Run Weekly Spot Rebalancer
         env:

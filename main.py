@@ -594,7 +594,7 @@ def main():
         
     # 12. Trigger Live Order Execution on Binance
     try:
-        from live_order_executor import execute_live_trading
+        from tradebot import execute_live_trading
         logger.info("Initiating live Binance futures order execution cycle...")
         execute_live_trading()
     except Exception as e:

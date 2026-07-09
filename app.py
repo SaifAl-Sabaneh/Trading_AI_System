@@ -17,7 +17,7 @@ from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import config
-from live_order_executor import execute_live_trading, get_exchange_connection, get_futures_balance
+from tradebot import execute_live_trading, get_exchange_connection, get_futures_balance
 
 # Global status log for dashboard view
 status_logs = []
