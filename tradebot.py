@@ -12,6 +12,7 @@ This script:
 """
 
 import os
+import json
 import sys
 import time
 import ccxt
@@ -463,7 +464,6 @@ def execute_live_trading():
     state_path = 'open_positions.json'
     if os.path.exists(state_path):
         try:
-            import json
             with open(state_path, 'r') as f:
                 open_positions_state = json.load(f)
         except Exception as se:
@@ -1293,7 +1293,6 @@ def update_live_dashboard(usdt_balance):
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
-        import json
         
         csv_path = 'demo_trades.csv' if getattr(config, 'IS_SANDBOX', False) else 'executed_trades.csv'
         trades_list = []
