@@ -236,24 +236,58 @@ def find_active_stop_loss_order(exchange, symbol, sl_side):
 
     try:
         # 2. Check algo/conditional open orders (specifically for Binance Futures / Demo Exchange)
-        algo_orders = exchange.fetch_open_orders(symbol, params={'type': 'algo'})
-        for order in algo_orders:
-            info = order.get('info', {})
-            order_type_raw = info.get('orderType', '').upper()
-            algo_side = info.get('side', '').lower()
-            if 'STOP' in order_type_raw and algo_side == sl_side:
-                # Normalize CCXT format so standard keys are accessible
-                return {
-                    'id': order.get('id') or info.get('algoId'),
-                    'type': 'stop_market',
-                    'side': algo_side,
-                    'stopPrice': float(info.get('triggerPrice', 0.0) or 0.0),
-                    'info': info
-                }
+        if hasattr(exchange, 'fapiPrivateGetOpenAlgoOrders'):
+            algo_orders = exchange.fapiPrivateGetOpenAlgoOrders()
+            target_raw_symbol = symbol.replace('/', '').split(':')[0].upper()
+            
+            for o in algo_orders:
+                raw_sym = o.get('symbol', '').upper()
+                order_type_raw = o.get('orderType', '').upper()
+                algo_side = o.get('side', '').upper()
+                algo_status = o.get('algoStatus', '').upper()
+                
+                if raw_sym == target_raw_symbol and 'STOP' in order_type_raw and algo_side == sl_side.upper() and algo_status == 'NEW':
+                    return {
+                        'id': o.get('algoId'),
+                        'type': 'stop_market',
+                        'side': algo_side.lower(),
+                        'stopPrice': float(o.get('triggerPrice', 0.0) or 0.0),
+                        'info': o
+                    }
     except Exception as e:
-        pass
+        logger.warning(f"Error fetching open algo orders for SL search on {symbol}: {e}")
 
     return None
+
+def cancel_old_stop_loss(exchange, symbol, sl_order):
+    """
+    Cancels a single stop-loss order (either standard or algo) on the exchange.
+    """
+    order_id = sl_order.get('id')
+    if not order_id:
+        return
+        
+    is_algo = False
+    info = sl_order.get('info', {})
+    if 'algoId' in info or 'algoType' in info:
+        is_algo = True
+        
+    if is_algo:
+        try:
+            if hasattr(exchange, 'fapiPrivateDeleteAlgoOrder'):
+                raw_symbol = symbol.replace('/', '').split(':')[0].upper()
+                exchange.fapiPrivateDeleteAlgoOrder({'symbol': raw_symbol, 'algoId': order_id})
+                logger.info(f"Cancelled old algo stop-loss order {order_id} for {symbol}.")
+                return
+        except Exception as e:
+            logger.warning(f"Failed to cancel old algo stop-loss order {order_id} for {symbol}: {e}")
+            
+    # Fallback to standard cancellation
+    try:
+        exchange.cancel_order(order_id, symbol)
+        logger.info(f"Cancelled old standard stop-loss order {order_id} for {symbol}.")
+    except Exception as e:
+        logger.warning(f"Failed to cancel old standard stop-loss order {order_id} for {symbol}: {e}")
 
 def calculate_weekly_pnl(trade_history):
     """Calculates total PnL USD of trades closed in the last 7 days."""
@@ -593,12 +627,9 @@ def execute_live_trading():
                                     
                         # 3. If new SL is determined and differs from current, update it
                         if new_sl is not None and (current_sl is None or abs(new_sl - current_sl) > 0.00001):
-                            # Cancel old SL order
+                            # Cancel old SL order specifically
                             if sl_order:
-                                try:
-                                    exchange.cancel_order(sl_order['id'], symbol)
-                                except Exception as ce:
-                                    logger.warning(f"Failed to cancel old SL order {sl_order['id']} for {symbol}: {ce}")
+                                cancel_old_stop_loss(exchange, symbol, sl_order)
                             
                             # Create new SL order
                             sl_price_prec = float(exchange.price_to_precision(symbol, new_sl))
