@@ -260,6 +260,47 @@ def find_active_stop_loss_order(exchange, symbol, sl_side):
 
     return None
 
+def find_active_take_profit_order(exchange, symbol, tp_side):
+    """
+    Finds if an active take-profit order exists for the symbol and side.
+    Queries both standard open orders and algo/conditional orders.
+    """
+    try:
+        # 1. Check standard open orders
+        open_orders = exchange.fetch_open_orders(symbol)
+        for order in open_orders:
+            order_type = order.get('type', '').lower()
+            order_side = order.get('side', '').lower()
+            if order_type in ['take_profit_market', 'take_profit', 'take_profit_limit'] and order_side == tp_side:
+                return order
+    except Exception as e:
+        logger.warning(f"Error fetching standard open orders for TP search on {symbol}: {e}")
+
+    try:
+        # 2. Check algo/conditional open orders (specifically for Binance Futures / Demo Exchange)
+        if hasattr(exchange, 'fapiPrivateGetOpenAlgoOrders'):
+            algo_orders = exchange.fapiPrivateGetOpenAlgoOrders()
+            target_raw_symbol = symbol.replace('/', '').split(':')[0].upper()
+            
+            for o in algo_orders:
+                raw_sym = o.get('symbol', '').upper()
+                order_type_raw = o.get('orderType', '').upper()
+                algo_side = o.get('side', '').upper()
+                algo_status = o.get('algoStatus', '').upper()
+                
+                if raw_sym == target_raw_symbol and 'TAKE_PROFIT' in order_type_raw and algo_side == tp_side.upper() and algo_status == 'NEW':
+                    return {
+                        'id': o.get('algoId'),
+                        'type': 'take_profit_market',
+                        'side': algo_side.lower(),
+                        'stopPrice': float(o.get('triggerPrice', 0.0) or 0.0),
+                        'info': o
+                    }
+    except Exception as e:
+        logger.warning(f"Error fetching open algo orders for TP search on {symbol}: {e}")
+
+    return None
+
 def cancel_old_stop_loss(exchange, symbol, sl_order):
     """
     Cancels a single stop-loss order (either standard or algo) on the exchange.
@@ -737,6 +778,39 @@ def execute_live_trading():
                                     f"• Position closed immediately at market to prevent unprotected risk!"
                                 )
                                 continue
+                                
+                        # 2c. Fail-Safe: Check and recreate missing Take-Profit (TP) order
+                        try:
+                            tp_side = 'sell' if pos['side'] == 'long' else 'buy'
+                            tp_order = find_active_take_profit_order(exchange, symbol, tp_side)
+                            if tp_order is None:
+                                if pos['side'] == 'long':
+                                    tp_price = pos['entry_price'] + (config.TP_ATR_MULT * atr_val)
+                                else:
+                                    tp_price = pos['entry_price'] - (config.TP_ATR_MULT * atr_val)
+                                
+                                tp_price_prec = float(exchange.price_to_precision(symbol, tp_price))
+                                tp_amount_prec = float(exchange.amount_to_precision(symbol, pos['size']))
+                                
+                                logger.warning(f"Fail-Safe: Missing Take-Profit detected for {symbol}. Recreating at {tp_price:.6f}")
+                                recreated_tp = exchange.create_order(
+                                    symbol=symbol,
+                                    type='TAKE_PROFIT_MARKET',
+                                    side=tp_side,
+                                    amount=tp_amount_prec,
+                                    price=None,
+                                    params={
+                                        'stopPrice': tp_price_prec,
+                                        'reduceOnly': True
+                                    }
+                                )
+                                if recreated_tp.get('id'):
+                                    logger.info(f"Successfully recreated TP for {symbol} to {tp_price:.5f}")
+                                else:
+                                    raise ValueError("Response missing order ID")
+                        except Exception as tp_err:
+                            logger.error(f"Failed to check/recreate TP order for {symbol}: {tp_err}")
+                            
                     except Exception as ex:
                         logger.error(f"Failed to audit/update trailing/breakeven stop-loss for {symbol}: {ex}")
                     
