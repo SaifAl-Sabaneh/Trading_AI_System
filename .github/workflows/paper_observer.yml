@@ -2,8 +2,8 @@ name: Carry Strategy 24/7 Paper Observer
 
 on:
   schedule:
-    # Use non-congested minute (17 past the hour) to avoid GitHub top-of-the-hour runner queue delays
-    - cron: '17 * * * *'
+    # Run every 15 minutes to guarantee timely execution and bypass GitHub cron queue delays
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
