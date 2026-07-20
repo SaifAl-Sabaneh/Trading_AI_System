@@ -1,0 +1,20 @@
+hypothesis_id: "HYP-CARRY-V1"
+hypothesis_name: "Perpetual Delta-Neutral Funding Carry Yield"
+version: "1.0.0"
+phenomenon_target: "PHENOMENON_01: Perpetual Funding Cost Burden"
+economic_mechanism: "Leveraged traders pay funding premium to shorts to maintain perpetual long exposure"
+information_edge: "Binance 8-Hour Funding Rate Stream + Spot/Perp Basis"
+data_sources:
+  - "database/market.db:funding_rates"
+  - "database/market.db:candles"
+preregistered_date: "2026-07-13"
+results:
+  btc_net_apr: "+0.88%"
+  eth_net_apr: "+0.11%"
+  sol_net_apr: "-3.51%"
+governance_classification: "PRODUCTION_CANDIDATE"
+gate_11_reproducible: true
+revision_history:
+  - version: "1.0.0"
+    date: "2026-07-19"
+    note: "Initial structural yield evaluation"

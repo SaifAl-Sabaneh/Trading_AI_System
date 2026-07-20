@@ -1,0 +1,39 @@
+name: Carry Strategy 24/7 Paper Observer
+
+on:
+  schedule:
+    # Run every hour to record basis spreads, API health, and funding rate updates
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  observe-and-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests urllib3
+
+      - name: Run Observation Cycle & Watchdog
+        run: |
+          python Trading_AI_System/engine/live_paper_observer.py
+          python Trading_AI_System/engine/paper_analytics.py
+          python Trading_AI_System/engine/operational_watchdog.py
+
+      - name: Commit and Push Database Updates
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "github-actions[bot]"
+          git add Trading_AI_System/database/market_live.db Trading_AI_System/campaign_final_report.json Trading_AI_System/backups/
+          git diff-index --quiet HEAD || git commit -m "auto: 24/7 paper observation cycle update [skip ci]"
+          git push

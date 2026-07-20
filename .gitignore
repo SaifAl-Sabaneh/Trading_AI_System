@@ -1,20 +1,15 @@
-# Local Environment Secrets
+# Sensitive files
 .env
+*.env
+SSH key.txt
+*.key
+*.pem
 
-# Dynamic State & Logs
-portfolio_state.js
-*.log
-cron_log.txt
-execution_history.log
-executed_trades.csv
-
-# Charts & Visual Reports
-*.png
-
-
-# Python Cache & Visual Studio
+# Python cache
 __pycache__/
-catboost_info/
 *.pyc
-.vscode/
-.idea/
+*.pyo
+
+# Logs
+*.log
+catboost_info/

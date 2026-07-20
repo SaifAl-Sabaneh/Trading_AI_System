@@ -1,0 +1,20 @@
+hypothesis_id: "HYP-MOM-V1"
+hypothesis_name: "Trend Continuation & 20-EMA Slope"
+version: "1.0.0"
+phenomenon_target: "PHENOMENON_03: Lagging Price Direction"
+economic_mechanism: "Unconstrained indicator prediction"
+information_edge: "EMA slope + ATR expansion (Technical Indicator)"
+data_sources:
+  - "database/market.db:candles"
+preregistered_date: "2026-07-13"
+results:
+  is_sample_size: 560
+  is_profit_factor: 0.59
+  oos_sample_size: 211
+  oos_profit_factor: 0.62
+governance_classification: "FALSIFIED"
+gate_11_reproducible: true
+revision_history:
+  - version: "1.0.0"
+    date: "2026-07-19"
+    note: "Initial walk-forward baseline run"

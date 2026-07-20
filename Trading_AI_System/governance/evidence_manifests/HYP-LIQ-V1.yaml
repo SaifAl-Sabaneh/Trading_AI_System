@@ -1,0 +1,21 @@
+hypothesis_id: "HYP-LIQ-V1"
+hypothesis_name: "Liquidation Cascade Volatility Exhaustion"
+version: "1.0.0"
+phenomenon_target: "PHENOMENON_02: Forced Liquidation Cascade Exhaustion"
+economic_mechanism: "Exchange liquidation engines submit forced market sell-offs driving price below equilibrium"
+information_edge: "Binance Force Order WebSocket Stream + Open Interest Flush"
+data_sources:
+  - "database/market.db:liquidations"
+  - "database/market.db:open_interest"
+preregistered_date: "2026-07-13"
+results:
+  is_sample_size: 17
+  is_profit_factor: 7.35
+  oos_sample_size: 6
+  oos_profit_factor: 0.81
+governance_classification: "INSUFFICIENT_EVIDENCE"
+gate_11_reproducible: true
+revision_history:
+  - version: "1.0.0"
+    date: "2026-07-19"
+    note: "Initial walk-forward baseline run"

@@ -1,0 +1,47 @@
+hypothesis_id: "HYP-FUND-REV-V1"
+hypothesis_name: "Funding Rate Extreme Reversion & Leverage Unwind"
+version: "1.0.2"
+phenomenon_target: "PHENOMENON_04: Extreme Unhedged Leverage Crowding Reversal"
+economic_mechanism: "When perpetual funding rates exceed the 90th percentile (+0.08%/8h) alongside expanding Open Interest, unhedged long positions bear unsustainable holding cost burdens, predicting a forced normalization."
+information_edge: "Binance 8-Hour Funding Rate Stream + Open Interest Expansion Z-Score"
+data_sources:
+  - "database/market_history.db:funding_rates_history"
+  - "database/market_history.db:open_interest_history"
+  - "database/market_history.db:candles_history"
+preregistered_date: "2026-07-19"
+entry_rules:
+  funding_percentile_min: 0.90
+  funding_8h_rate_min: 0.0008
+  open_interest_zscore_min: 1.0
+  action: "SELL / BUY"
+exit_rules:
+  holding_horizon_bars: 24
+  friction_deduction_pct: 0.0014
+pre_registered_success_criteria:
+  min_oos_sample_size: 100
+  min_oos_profit_factor: 1.20
+  min_oos_expectancy_pct: 0.0010
+results:
+  oos_sample_size: 3277
+  oos_win_rate: "66.6%"
+  oos_profit_factor: 0.72
+  oos_expectancy: "-0.14%"
+governance_classification: "FALSIFIED"
+classification_reason: |
+  Evaluated over 3.5-year Gold-Standard historical dataset (market_history.db, Nov 2020 - Jul 2024).
+  Across 3,277 OOS trade events, high win rate (66.6%) was offset by severe tail losses during
+  runaway macro trends, yielding Net Expectancy -0.14% and Profit Factor 0.72 (below hurdle 1.20).
+gate_11_reproducible: true
+revision_history:
+  - version: "1.0.0"
+    date: "2026-07-19"
+    note: "Pre-registration prior to out-of-sample campaign run"
+  - version: "1.0.1"
+    date: "2026-07-20"
+    note: "Reclassified to UNTESTED due to 14-day data window limitation"
+  - version: "1.0.2"
+    date: "2026-07-20"
+    note: |
+      Final campaign scan completed over 3.5-year dataset (market_history.db).
+      Sample count n = 3,277, Profit Factor PF = 0.72, Net Expectancy = -0.14%.
+      Governance classification updated to FALSIFIED.
