@@ -2,7 +2,7 @@
   "campaign_id": "CARRY-PAPER-V1-20260720",
   "strategy_hash": "3965622973c9fdc2",
   "settlements_logged": 7,
-  "days_observed": 0.2425999189814815,
+  "days_observed": 0.39802358796296294,
   "statistical_confidence": {
     "settlements_logged": 7,
     "minimum_required": 90,
@@ -11,7 +11,7 @@
   "gate_results": {
     "paper_duration": {
       "required": 30.0,
-      "actual": 0.2425999189814815,
+      "actual": 0.39802358796296294,
       "passed": false
     },
     "settlements": {
@@ -31,7 +31,7 @@
     },
     "funding_persistence": {
       "limit": 75.0,
-      "actual": 85.71428571428571,
+      "actual": 100.0,
       "passed": true
     },
     "operational_failures": {
@@ -46,7 +46,7 @@
     "net_realized_return_pct": 0.0,
     "max_drawdown_pct": 0.0,
     "execution_drift_pct": 0.0,
-    "funding_persistence_pct": 85.71428571428571
+    "funding_persistence_pct": 100.0
   },
   "operational_metrics": {
     "kill_switch_events": 0,
@@ -57,10 +57,10 @@
     {
       "Symbol": "BTCUSDT",
       "Obs_Cycles": 7,
-      "Avg_Basis": "-0.036%",
+      "Avg_Basis": "-0.042%",
       "Max_Basis": "0.067%",
-      "Avg_8h_FR": "+0.0040%",
-      "Observed_APR": "+4.38%",
+      "Avg_8h_FR": "+0.0049%",
+      "Observed_APR": "+5.41%",
       "Capture_Eff": "0.0%",
       "Gross_Funding": "$0.00",
       "Trading_Fees": "$0.00",
@@ -69,10 +69,10 @@
     {
       "Symbol": "ETHUSDT",
       "Obs_Cycles": 7,
-      "Avg_Basis": "-0.034%",
+      "Avg_Basis": "-0.039%",
       "Max_Basis": "0.058%",
-      "Avg_8h_FR": "+0.0026%",
-      "Observed_APR": "+2.87%",
+      "Avg_8h_FR": "+0.0030%",
+      "Observed_APR": "+3.30%",
       "Capture_Eff": "0.0%",
       "Gross_Funding": "$0.00",
       "Trading_Fees": "$0.00",
