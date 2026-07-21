@@ -24,7 +24,7 @@ class HistoryDatabase:
 
     def get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA journal_mode=DELETE;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA cache_size=-64000;")   # 64 MB cache for large reads
         conn.row_factory = sqlite3.Row

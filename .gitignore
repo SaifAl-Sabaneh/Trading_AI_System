@@ -5,6 +5,10 @@ SSH key.txt
 *.key
 *.pem
 
+# SQLite temporary WAL/SHM files
+*.db-wal
+*.db-shm
+
 # Python cache
 __pycache__/
 *.pyc

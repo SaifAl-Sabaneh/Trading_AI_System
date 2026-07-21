@@ -15,10 +15,25 @@ class Database:
         self._init_db()
 
     def get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-        return conn
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA journal_mode=DELETE;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            return conn
+        except sqlite3.DatabaseError as e:
+            print(f"[WARN] SQLite DatabaseError encountered ({e}). Attempting auto-recovery...")
+            if os.path.exists(self.db_path):
+                try:
+                    os.rename(self.db_path, f"{self.db_path}.corrupt_bak")
+                except Exception:
+                    pass
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA journal_mode=DELETE;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            if os.path.exists(self.schema_path):
+                with open(self.schema_path, "r") as f:
+                    conn.executescript(f.read())
+            return conn
 
     def _init_db(self):
         if not os.path.exists(self.schema_path):
