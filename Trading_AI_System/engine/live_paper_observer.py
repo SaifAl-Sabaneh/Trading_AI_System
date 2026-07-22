@@ -73,32 +73,50 @@ class LivePaperObserver:
             print(f"  [WARN] Failed to init campaign metadata: {e}")
 
     def fetch_live_spot_price(self, symbol: str) -> float:
-        url = f"{BINANCE_SPOT_BASE_URL}/api/v3/ticker/price?symbol={symbol}"
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                data = json.loads(r.read().decode('utf-8'))
-                return float(data.get("price", 0.0))
-        except Exception as e:
-            self.api_failures += 1
-            print(f"  [WARN] Failed to fetch spot price for {symbol}: {e}")
-            return 0.0
+        endpoints = [
+            f"{BINANCE_SPOT_BASE_URL}/api/v3/ticker/price?symbol={symbol}",
+            f"https://api1.binance.com/api/v3/ticker/price?symbol={symbol}",
+            f"https://api2.binance.com/api/v3/ticker/price?symbol={symbol}",
+            f"https://api3.binance.com/api/v3/ticker/price?symbol={symbol}"
+        ]
+        for url in endpoints:
+            for attempt in range(2):
+                try:
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                    with urllib.request.urlopen(req, timeout=8) as r:
+                        data = json.loads(r.read().decode('utf-8'))
+                        price = float(data.get("price", 0.0))
+                        if price > 0.0:
+                            return price
+                except Exception as e:
+                    time.sleep(1)
+        self.api_failures += 1
+        print(f"  [WARN] Failed to fetch spot price for {symbol} across all endpoints")
+        return 0.0
 
     def fetch_live_premium_index(self, symbol: str) -> Dict[str, Any]:
-        url = f"{BINANCE_FUTURES_BASE_URL}/fapi/v1/premiumIndex?symbol={symbol}"
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                data = json.loads(r.read().decode('utf-8'))
-                return {
-                    "mark_price": float(data.get("markPrice", 0.0)),
-                    "last_funding_rate": float(data.get("lastFundingRate", 0.0)),
-                    "next_funding_time": int(data.get("nextFundingTime", 0))
-                }
-        except Exception as e:
-            self.api_failures += 1
-            print(f"  [WARN] Failed to fetch premium index for {symbol}: {e}")
-            return {"mark_price": 0.0, "last_funding_rate": 0.0, "next_funding_time": 0}
+        endpoints = [
+            f"{BINANCE_FUTURES_BASE_URL}/fapi/v1/premiumIndex?symbol={symbol}",
+            f"https://fapi.binance.com/fapi/v1/premiumIndex?symbol={symbol}"
+        ]
+        for url in endpoints:
+            for attempt in range(2):
+                try:
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                    with urllib.request.urlopen(req, timeout=8) as r:
+                        data = json.loads(r.read().decode('utf-8'))
+                        mark_p = float(data.get("markPrice", 0.0))
+                        if mark_p > 0.0:
+                            return {
+                                "mark_price": mark_p,
+                                "last_funding_rate": float(data.get("lastFundingRate", 0.0)),
+                                "next_funding_time": int(data.get("nextFundingTime", 0))
+                            }
+                except Exception as e:
+                    time.sleep(1)
+        self.api_failures += 1
+        print(f"  [WARN] Failed to fetch premium index for {symbol} across all endpoints")
+        return {"mark_price": 0.0, "last_funding_rate": 0.0, "next_funding_time": 0}
 
     @staticmethod
     def classify_funding_regime(annualized_apr: float) -> str:
@@ -224,10 +242,13 @@ class LivePaperObserver:
                 pos["net_pnl_usd"],
                 pos["state"]
             )
-            try:
-                self.db.insert_paper_carry_log(log_tuple)
-            except Exception as ex:
-                print(f"  [WARN] Could not persist paper log: {ex}")
+            if spot_p > 0.0 and mark_p > 0.0:
+                try:
+                    self.db.insert_paper_carry_log(log_tuple)
+                except Exception as ex:
+                    print(f"  [WARN] Could not persist paper log: {ex}")
+            else:
+                print(f"  [WARN] Skipping DB persistence for {symbol} due to invalid zero price payload")
             
             print(f"\n>>> {symbol}")
             print(f"  Spot Price         : ${spot_p:,.2f}")
