@@ -38,5 +38,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions[bot]"
           git add Trading_AI_System/database/market_live.db Trading_AI_System/campaign_final_report.json Trading_AI_System/backups/
-          git diff-index --quiet HEAD || git commit -m "auto: 24/7 paper observation cycle update [skip ci]"
+          git commit -m "auto: 24/7 paper observation cycle update [skip ci]" || echo "No changes to commit"
           git push
