@@ -5,7 +5,8 @@ SSH key.txt
 *.key
 *.pem
 
-# SQLite temporary WAL/SHM files
+# Ephemeral SQLite database files (persisted cleanly via paper_carry_ledger.csv)
+Trading_AI_System/database/market_live.db
 *.db-wal
 *.db-shm
 

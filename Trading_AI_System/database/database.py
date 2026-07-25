@@ -11,7 +11,10 @@ class Database:
     def __init__(self, db_path: str = DB_PATH, schema_path: str = SCHEMA_PATH):
         self.db_path = db_path
         self.schema_path = schema_path
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        base_dir = os.path.dirname(self.db_path)
+        self.ledger_csv = os.path.join(base_dir, "paper_carry_ledger.csv")
+        self.events_csv = os.path.join(base_dir, "campaign_events.csv")
+        os.makedirs(base_dir, exist_ok=True)
         self._init_db()
 
     def get_connection(self) -> sqlite3.Connection:
@@ -21,10 +24,10 @@ class Database:
             conn.execute("PRAGMA synchronous=NORMAL;")
             return conn
         except sqlite3.DatabaseError as e:
-            print(f"[WARN] SQLite DatabaseError encountered ({e}). Attempting auto-recovery...")
+            print(f"[WARN] SQLite DatabaseError encountered ({e}). Recreating database file...")
             if os.path.exists(self.db_path):
                 try:
-                    os.rename(self.db_path, f"{self.db_path}.corrupt_bak")
+                    os.remove(self.db_path)
                 except Exception:
                     pass
             conn = sqlite3.connect(self.db_path)
@@ -44,6 +47,49 @@ class Database:
             
         with self.get_connection() as conn:
             conn.executescript(schema_sql)
+            conn.commit()
+            
+        self._sync_csv_to_sqlite()
+
+    def _sync_csv_to_sqlite(self):
+        import csv
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Sync paper_carry_ledger.csv into SQLite table if CSV exists
+            if os.path.exists(self.ledger_csv):
+                try:
+                    with open(self.ledger_csv, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for r in reader:
+                            if float(r.get('spot_price', 0) or 0) > 0 and float(r.get('mark_price', 0) or 0) > 0:
+                                cursor.execute("""
+                                INSERT OR IGNORE INTO paper_carry_ledger
+                                (timestamp, symbol, spot_price, mark_price, basis_spread_pct, funding_rate_8h, annualized_apr, funding_regime, action, funding_collected_usd, fees_paid_usd, net_pnl_usd, status)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                                """, (
+                                    int(r['timestamp']), r['symbol'], float(r['spot_price']), float(r['mark_price']),
+                                    float(r['basis_spread_pct']), float(r['funding_rate_8h']), float(r['annualized_apr']),
+                                    r['funding_regime'], r['action'], float(r['funding_collected_usd']),
+                                    float(r['fees_paid_usd']), float(r['net_pnl_usd']), r['status']
+                                ))
+                except Exception as ex:
+                    print(f"  [WARN] Failed to sync ledger CSV to SQLite: {ex}")
+
+            # Sync campaign_events.csv into SQLite table if CSV exists
+            if os.path.exists(self.events_csv):
+                try:
+                    with open(self.events_csv, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for r in reader:
+                            cursor.execute("""
+                            INSERT OR IGNORE INTO campaign_events
+                            (timestamp, campaign_id, event_type, details, hash)
+                            VALUES (?, ?, ?, ?, ?);
+                            """, (
+                                int(r['timestamp']), r['campaign_id'], r['event_type'], r['details'], r['hash']
+                            ))
+                except Exception as ex:
+                    print(f"  [WARN] Failed to sync events CSV to SQLite: {ex}")
             conn.commit()
 
     def insert_candles(self, candles_data: List[Tuple]) -> int:
@@ -127,6 +173,7 @@ class Database:
             return cursor.rowcount
 
     def insert_paper_carry_log(self, log_tuple: Tuple) -> int:
+        import csv
         query = """
         INSERT INTO paper_carry_ledger 
         (timestamp, symbol, spot_price, mark_price, basis_spread_pct, funding_rate_8h, annualized_apr, funding_regime, action, funding_collected_usd, fees_paid_usd, net_pnl_usd, status)
@@ -136,7 +183,18 @@ class Database:
             cursor = conn.cursor()
             cursor.execute(query, log_tuple)
             conn.commit()
-            return cursor.rowcount
+            rc = cursor.rowcount
+
+        try:
+            file_exists = os.path.exists(self.ledger_csv)
+            with open(self.ledger_csv, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(['timestamp', 'symbol', 'spot_price', 'mark_price', 'basis_spread_pct', 'funding_rate_8h', 'annualized_apr', 'funding_regime', 'action', 'funding_collected_usd', 'fees_paid_usd', 'net_pnl_usd', 'status'])
+                writer.writerow(list(log_tuple))
+        except Exception as ex:
+            print(f"  [WARN] Failed to write ledger row to CSV: {ex}")
+        return rc
 
     def insert_position_event(self, event_tuple: Tuple) -> int:
         query = """
@@ -161,6 +219,7 @@ class Database:
             conn.commit()
 
     def insert_campaign_event(self, campaign_id: str, event_type: str, details: str, config_hash: str) -> int:
+        import csv
         ts_now = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -182,7 +241,18 @@ class Database:
             """
             cursor.execute(query, (ts_now, campaign_id, event_type, details, chained_hash))
             conn.commit()
-            return cursor.rowcount
+            rc = cursor.rowcount
+
+        try:
+            file_exists = os.path.exists(self.events_csv)
+            with open(self.events_csv, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(['timestamp', 'campaign_id', 'event_type', 'details', 'hash'])
+                writer.writerow([ts_now, campaign_id, event_type, details, chained_hash])
+        except Exception as ex:
+            print(f"  [WARN] Failed to write event row to CSV: {ex}")
+        return rc
 
     def fetch_candles(self, symbol: str, timeframe: str, start_ts: int = None, end_ts: int = None) -> List[Tuple]:
         query = "SELECT timestamp, open, high, low, close, volume FROM candles WHERE symbol = ? AND timeframe = ?"
