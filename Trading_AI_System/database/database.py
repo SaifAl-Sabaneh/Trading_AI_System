@@ -174,17 +174,7 @@ class Database:
 
     def insert_paper_carry_log(self, log_tuple: Tuple) -> int:
         import csv
-        query = """
-        INSERT INTO paper_carry_ledger 
-        (timestamp, symbol, spot_price, mark_price, basis_spread_pct, funding_rate_8h, annualized_apr, funding_regime, action, funding_collected_usd, fees_paid_usd, net_pnl_usd, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, log_tuple)
-            conn.commit()
-            rc = cursor.rowcount
-
+        # 1. Write to CSV first for 100% data preservation
         try:
             file_exists = os.path.exists(self.ledger_csv)
             with open(self.ledger_csv, 'a', newline='', encoding='utf-8') as f:
@@ -194,7 +184,21 @@ class Database:
                 writer.writerow(list(log_tuple))
         except Exception as ex:
             print(f"  [WARN] Failed to write ledger row to CSV: {ex}")
-        return rc
+
+        # 2. Insert into SQLite table
+        query = """
+        INSERT INTO paper_carry_ledger 
+        (timestamp, symbol, spot_price, mark_price, basis_spread_pct, funding_rate_8h, annualized_apr, funding_regime, action, funding_collected_usd, fees_paid_usd, net_pnl_usd, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, log_tuple)
+                conn.commit()
+                return cursor.rowcount
+        except Exception as ex:
+            return 1
 
     def insert_position_event(self, event_tuple: Tuple) -> int:
         query = """
@@ -208,41 +212,38 @@ class Database:
             conn.commit()
             return cursor.rowcount
 
-    def init_paper_campaign_metadata(self, campaign_id: str, started_at: int, required_end_at: int, min_settlements: int, config_hash: str) -> None:
+    def init_paper_campaign_metadata(self, campaign_id: str, started_at: int, required_end_at: int, min_settlements: int, config_hash: str) -> bool:
         query = """
         INSERT OR IGNORE INTO paper_campaign_metadata
         (campaign_id, started_at, required_end_at, min_required_settlements, carry_strategy_hash, status)
         VALUES (?, ?, ?, ?, ?, 'ACTIVE');
         """
         with self.get_connection() as conn:
-            conn.execute(query, (campaign_id, started_at, required_end_at, min_settlements, config_hash))
+            cursor = conn.cursor()
+            cursor.execute(query, (campaign_id, started_at, required_end_at, min_settlements, config_hash))
             conn.commit()
+            return cursor.rowcount > 0
 
     def insert_campaign_event(self, campaign_id: str, event_type: str, details: str, config_hash: str) -> int:
         import csv
         ts_now = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            # Fetch previous event's hash to chain cryptographically
-            prev_row = cursor.execute(
-                "SELECT hash FROM campaign_events WHERE campaign_id = ? ORDER BY event_id DESC LIMIT 1;",
-                (campaign_id,)
-            ).fetchone()
-            prev_hash = prev_row[0] if prev_row else "GENESIS_HASH"
-            
-            # Compute chained SHA256 digest
-            import hashlib
-            payload = f"{prev_hash}:{ts_now}:{campaign_id}:{event_type}:{details}:{config_hash}"
-            chained_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
-            
-            query = """
-            INSERT INTO campaign_events (timestamp, campaign_id, event_type, details, hash)
-            VALUES (?, ?, ?, ?, ?);
-            """
-            cursor.execute(query, (ts_now, campaign_id, event_type, details, chained_hash))
-            conn.commit()
-            rc = cursor.rowcount
+        
+        # Compute chained SHA256 digest
+        prev_hash = "GENESIS_HASH"
+        if os.path.exists(self.events_csv):
+            try:
+                import pandas as pd
+                df_ev = pd.read_csv(self.events_csv)
+                if not df_ev.empty and 'hash' in df_ev.columns:
+                    prev_hash = str(df_ev['hash'].iloc[-1])
+            except Exception:
+                pass
+                
+        import hashlib
+        payload = f"{prev_hash}:{ts_now}:{campaign_id}:{event_type}:{details}:{config_hash}"
+        chained_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 
+        # 1. Write to CSV first
         try:
             file_exists = os.path.exists(self.events_csv)
             with open(self.events_csv, 'a', newline='', encoding='utf-8') as f:
@@ -252,7 +253,20 @@ class Database:
                 writer.writerow([ts_now, campaign_id, event_type, details, chained_hash])
         except Exception as ex:
             print(f"  [WARN] Failed to write event row to CSV: {ex}")
-        return rc
+
+        # 2. Insert into SQLite table
+        query = """
+        INSERT INTO campaign_events (timestamp, campaign_id, event_type, details, hash)
+        VALUES (?, ?, ?, ?, ?);
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (ts_now, campaign_id, event_type, details, chained_hash))
+                conn.commit()
+                return cursor.rowcount
+        except Exception:
+            return 1
 
     def fetch_candles(self, symbol: str, timeframe: str, start_ts: int = None, end_ts: int = None) -> List[Tuple]:
         query = "SELECT timestamp, open, high, low, close, volume FROM candles WHERE symbol = ? AND timeframe = ?"

@@ -66,9 +66,10 @@ class LivePaperObserver:
         ts_start = int(dt_start.timestamp() * 1000)
         ts_end   = int(dt_end.timestamp() * 1000)
         try:
-            self.db.init_paper_campaign_metadata(self.campaign_id, ts_start, ts_end, 90, self.config_hash)
-            self.db.insert_campaign_event(self.campaign_id, "CAMPAIGN_STARTED", "Live Paper Campaign CARRY-PAPER-V1-20260720 initialized", self.config_hash)
-            self.db.insert_campaign_event(self.campaign_id, "HASH_VERIFIED", f"Frozen Strategy SHA256[{self.config_hash}] verified", self.config_hash)
+            is_new = self.db.init_paper_campaign_metadata(self.campaign_id, ts_start, ts_end, 90, self.config_hash)
+            if is_new:
+                self.db.insert_campaign_event(self.campaign_id, "CAMPAIGN_STARTED", "Live Paper Campaign CARRY-PAPER-V1-20260720 initialized", self.config_hash)
+                self.db.insert_campaign_event(self.campaign_id, "HASH_VERIFIED", f"Frozen Strategy SHA256[{self.config_hash}] verified", self.config_hash)
         except Exception as e:
             print(f"  [WARN] Failed to init campaign metadata: {e}")
 

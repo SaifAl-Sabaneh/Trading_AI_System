@@ -31,13 +31,23 @@ class PaperTradingAnalytics:
         print("  Database: market_live.db :: paper_carry_ledger & paper_position_events")
         print("==============================================================================")
         
+        if os.path.exists(self.db.ledger_csv):
+            try:
+                df_ledger = pd.read_csv(self.db.ledger_csv)
+                if not df_ledger.empty and 'timestamp' in df_ledger.columns:
+                    df_ledger = df_ledger.sort_values('timestamp').reset_index(drop=True)
+            except Exception:
+                df_ledger = pd.DataFrame()
+        else:
+            with self.db.get_connection() as conn:
+                df_ledger = pd.read_sql(
+                    "SELECT entry_id, timestamp, symbol, spot_price, mark_price, basis_spread_pct, "
+                    "funding_rate_8h, annualized_apr, funding_regime, action, funding_collected_usd, "
+                    "fees_paid_usd, net_pnl_usd, status FROM paper_carry_ledger ORDER BY timestamp ASC;",
+                    conn
+                )
+
         with self.db.get_connection() as conn:
-            df_ledger = pd.read_sql(
-                "SELECT entry_id, timestamp, symbol, spot_price, mark_price, basis_spread_pct, "
-                "funding_rate_8h, annualized_apr, funding_regime, action, funding_collected_usd, "
-                "fees_paid_usd, net_pnl_usd, status FROM paper_carry_ledger ORDER BY timestamp ASC;",
-                conn
-            )
             df_events = pd.read_sql(
                 "SELECT event_id, timestamp, symbol, event_type, spot_price, mark_price, amount_usd, fee_usd, reason "
                 "FROM paper_position_events ORDER BY timestamp ASC;",
