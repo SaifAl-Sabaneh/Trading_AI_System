@@ -75,6 +75,7 @@ class LivePaperObserver:
 
     def fetch_live_spot_price(self, symbol: str) -> float:
         endpoints = [
+            f"https://data-api.binance.vision/api/v3/ticker/price?symbol={symbol}",
             f"{BINANCE_SPOT_BASE_URL}/api/v3/ticker/price?symbol={symbol}",
             f"https://api1.binance.com/api/v3/ticker/price?symbol={symbol}",
             f"https://api2.binance.com/api/v3/ticker/price?symbol={symbol}",
@@ -89,7 +90,7 @@ class LivePaperObserver:
                         price = float(data.get("price", 0.0))
                         if price > 0.0:
                             return price
-                except Exception as e:
+                except Exception:
                     time.sleep(1)
         self.api_failures += 1
         print(f"  [WARN] Failed to fetch spot price for {symbol} across all endpoints")
@@ -98,7 +99,9 @@ class LivePaperObserver:
     def fetch_live_premium_index(self, symbol: str) -> Dict[str, Any]:
         endpoints = [
             f"{BINANCE_FUTURES_BASE_URL}/fapi/v1/premiumIndex?symbol={symbol}",
-            f"https://fapi.binance.com/fapi/v1/premiumIndex?symbol={symbol}"
+            f"https://fapi.binance.com/fapi/v1/premiumIndex?symbol={symbol}",
+            f"https://fapi1.binance.com/fapi/v1/premiumIndex?symbol={symbol}",
+            f"https://fapi2.binance.com/fapi/v1/premiumIndex?symbol={symbol}"
         ]
         for url in endpoints:
             for attempt in range(2):
@@ -113,7 +116,7 @@ class LivePaperObserver:
                                 "last_funding_rate": float(data.get("lastFundingRate", 0.0)),
                                 "next_funding_time": int(data.get("nextFundingTime", 0))
                             }
-                except Exception as e:
+                except Exception:
                     time.sleep(1)
         self.api_failures += 1
         print(f"  [WARN] Failed to fetch premium index for {symbol} across all endpoints")
