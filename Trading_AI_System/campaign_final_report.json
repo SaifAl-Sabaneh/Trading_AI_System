@@ -1,22 +1,22 @@
 {
   "campaign_id": "CARRY-PAPER-V1-20260720",
   "strategy_hash": "3965622973c9fdc2",
-  "settlements_logged": 22,
-  "days_observed": 100.25526196759259,
+  "settlements_logged": 23,
+  "days_observed": 112.86235331018518,
   "statistical_confidence": {
-    "settlements_logged": 22,
+    "settlements_logged": 23,
     "minimum_required": 90,
     "confidence_status": "PENDING_SAMPLES"
   },
   "gate_results": {
     "paper_duration": {
       "required": 30.0,
-      "actual": 100.25526196759259,
+      "actual": 112.86235331018518,
       "passed": true
     },
     "settlements": {
       "required": 90,
-      "actual": 22,
+      "actual": 23,
       "passed": false
     },
     "execution_drift": {
@@ -42,8 +42,8 @@
   },
   "portfolio_metrics": {
     "starting_equity_usd": 10000.0,
-    "current_equity_usd": 10000.0,
-    "net_realized_return_pct": 0.0,
+    "current_equity_usd": 9986.0,
+    "net_realized_return_pct": -0.13999999999999999,
     "max_drawdown_pct": 0.0,
     "execution_drift_pct": 0.0,
     "funding_persistence_pct": 100.0
@@ -56,27 +56,27 @@
   "attribution_summary": [
     {
       "Symbol": "BTCUSDT",
-      "Obs_Cycles": 22,
-      "Avg_Basis": "-0.040%",
+      "Obs_Cycles": 23,
+      "Avg_Basis": "-0.039%",
       "Max_Basis": "0.067%",
-      "Avg_8h_FR": "+0.0050%",
-      "Observed_APR": "+5.42%",
+      "Avg_8h_FR": "+0.0052%",
+      "Observed_APR": "+5.66%",
       "Capture_Eff": "0.0%",
       "Gross_Funding": "$0.00",
-      "Trading_Fees": "$21.00",
-      "Net_PnL": "$+0.00"
+      "Trading_Fees": "$28.00",
+      "Net_PnL": "$-7.00"
     },
     {
       "Symbol": "ETHUSDT",
-      "Obs_Cycles": 22,
-      "Avg_Basis": "-0.040%",
+      "Obs_Cycles": 23,
+      "Avg_Basis": "-0.039%",
       "Max_Basis": "0.058%",
-      "Avg_8h_FR": "+0.0051%",
-      "Observed_APR": "+5.64%",
+      "Avg_8h_FR": "+0.0054%",
+      "Observed_APR": "+5.87%",
       "Capture_Eff": "0.0%",
       "Gross_Funding": "$0.00",
-      "Trading_Fees": "$14.00",
-      "Net_PnL": "$+0.00"
+      "Trading_Fees": "$21.00",
+      "Net_PnL": "$-7.00"
     }
   ],
   "deployment_decision": "LOCKED_PENDING_PAPER_EVIDENCE"
